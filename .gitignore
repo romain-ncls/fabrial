@@ -1,0 +1,17 @@
+# Rust
+/target/
+
+# Recordings never belong here: they hold other people's voices.
+*.flac
+*.wav
+*.mp3
+*.ogg
+*.opus
+*.m4a
+mic-takes/
+
+# Models are downloaded, not committed.
+*.onnx
+*.tflite
+*.pt
+*.ckpt
