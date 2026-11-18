@@ -28,7 +28,7 @@ use std::io::Cursor;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use fabrial_core::ChainFile;
 use fabrial_core::live::{self, Input, Live, Output, Stats};
 use pipewire as pw;
@@ -53,7 +53,7 @@ pub struct Options {
     pub mic: Option<String>,
     /// The least delay the worker gets to process each block, in ms.
     pub margin_ms: f32,
-    /// How often to print stats. None: only at the end.
+    /// How often to print stats. None: only when something goes wrong.
     pub stats_every: Option<Duration>,
     /// Move apps that record from the mic onto fabrial's mic.
     pub move_apps: bool,
@@ -66,6 +66,32 @@ pub fn run(opts: Options) -> Result<()> {
     let mainloop = pw::main_loop::MainLoopRc::new(None).context("starting PipeWire's loop")?;
     let context = pw::context::ContextRc::new(&mainloop, None)?;
     let core = context.connect_rc(None).context("connecting to PipeWire")?;
+    if already_running(&mainloop, &core) {
+        bail!("another fabrial is running: its mic, {NODE_NAME}, exists");
+    }
+    // Losing PipeWire, or a stream failing, ends the run with an error, so a
+    // service manager restarts it.
+    let failure = Rc::new(RefCell::new(None::<String>));
+    let fail = {
+        let (mainloop, failure) = (mainloop.clone(), failure.clone());
+        Rc::new(move |why: String| {
+            failure.borrow_mut().get_or_insert(why);
+            mainloop.quit();
+        })
+    };
+    let lost = Rc::new(Cell::new(false));
+    let _core_listener = core
+        .add_listener_local()
+        .error({
+            let (fail, lost) = (fail.clone(), lost.clone());
+            move |id, _, _, message| {
+                if id == pw::core::PW_ID_CORE {
+                    lost.set(true);
+                    fail(format!("lost PipeWire: {message}"));
+                }
+            }
+        })
+        .register();
 
     let rate = opts.chain.rate;
     let chain_name = opts.chain.name.clone();
@@ -90,9 +116,9 @@ pub fn run(opts: Options) -> Result<()> {
     let _capture_listener = capture
         .add_local_listener_with_user_data(input)
         .state_changed({
-            let (own, mover) = (own.clone(), mover.clone());
+            let (own, mover, fail) = (own.clone(), mover.clone(), fail.clone());
             move |stream, _, old, new| {
-                report_state("mic input", &old, &new);
+                report_state("mic input", &old, &new, &*fail);
                 own.set((stream.node_id(), own.get().1));
                 if let Some(m) = &mover {
                     m.poke();
@@ -132,9 +158,9 @@ pub fn run(opts: Options) -> Result<()> {
     let _source_listener = source
         .add_local_listener_with_user_data(output)
         .state_changed({
-            let (own, mover) = (own.clone(), mover.clone());
+            let (own, mover, fail) = (own.clone(), mover.clone(), fail.clone());
             move |stream, _, old, new| {
-                report_state("virtual mic", &old, &new);
+                report_state("virtual mic", &old, &new, &*fail);
                 own.set((own.get().0, stream.node_id()));
                 if let Some(m) = &mover {
                     m.poke();
@@ -196,14 +222,15 @@ pub fn run(opts: Options) -> Result<()> {
     );
 
     let report = Report::new(live);
-    let _timer = opts.stats_every.map(|every| {
-        let timer = mainloop.loop_().add_timer({
-            let report = report.clone();
-            move |_| report.print()
-        });
-        let _ = timer.update_timer(Some(every), Some(every));
-        timer
+    // Without a stats interval, it still looks every 10 s, and only prints
+    // when something went wrong.
+    let full = opts.stats_every.is_some();
+    let every = opts.stats_every.unwrap_or(Duration::from_secs(10));
+    let timer = mainloop.loop_().add_timer({
+        let report = report.clone();
+        move |_| report.print(full)
     });
+    let _ = timer.update_timer(Some(every), Some(every));
     let _signals = [Signal::INT, Signal::TERM].map(|sig| {
         let ml = mainloop.clone();
         mainloop.loop_().add_signal_local(sig, move || ml.quit())
@@ -211,14 +238,21 @@ pub fn run(opts: Options) -> Result<()> {
 
     mainloop.run();
 
-    if let Some(m) = &mover {
-        m.restore();
-        roundtrip(&mainloop, &core);
+    // Without PipeWire there is nothing to put back, and a round trip would
+    // never return.
+    if !lost.get() {
+        if let Some(m) = &mover {
+            m.restore();
+            roundtrip(&mainloop, &core);
+        }
+        let _ = capture.disconnect();
+        let _ = source.disconnect();
     }
-    let _ = capture.disconnect();
-    let _ = source.disconnect();
-    report.print();
-    Ok(())
+    report.print(true);
+    match failure.borrow_mut().take() {
+        Some(why) => bail!(why),
+        None => Ok(()),
+    }
 }
 
 /// Blocks SIGINT and SIGTERM before any other thread starts, so every
@@ -297,24 +331,48 @@ fn mono_f32(rate: u32) -> Vec<u8> {
         .into_inner()
 }
 
-fn report_state(what: &str, old: &StreamState, new: &StreamState) {
+fn report_state(what: &str, old: &StreamState, new: &StreamState, fail: &dyn Fn(String)) {
     match new {
-        StreamState::Error(e) => eprintln!("fabrial: {what}: error: {e}"),
+        StreamState::Error(e) => fail(format!("{what}: {e}")),
         _ => eprintln!("fabrial: {what}: {old:?} → {new:?}"),
     }
+}
+
+/// Whether a node named like fabrial's mic already exists: two would
+/// confuse apps, and both runs would move the same streams.
+fn already_running(mainloop: &pw::main_loop::MainLoopRc, core: &pw::core::CoreRc) -> bool {
+    let found = Rc::new(Cell::new(false));
+    let Ok(registry) = core.get_registry() else {
+        return false;
+    };
+    let _listener = registry
+        .add_listener_local()
+        .global({
+            let found = found.clone();
+            move |global| {
+                if global.props.and_then(|p| p.get(*pw::keys::NODE_NAME)) == Some(NODE_NAME) {
+                    found.set(true);
+                }
+            }
+        })
+        .register();
+    roundtrip(mainloop, core);
+    found.get()
 }
 
 fn ms(samples: u64, rate: u32) -> f64 {
     samples as f64 * 1000. / rate as f64
 }
 
-/// Prints what happened since the last line.
+/// Prints what happened since the last look.
 /// It owns the `Live`: the worker stops when the last copy goes.
 #[derive(Clone)]
 struct Report {
     live: Rc<Live>,
     last: Rc<RefCell<(Instant, Stats)>>,
     start: Instant,
+    /// Whether the mic sent nothing during the last look.
+    silent: Rc<Cell<bool>>,
 }
 
 impl Report {
@@ -324,39 +382,55 @@ impl Report {
             live: Rc::new(live),
             last: Rc::new(RefCell::new((now, Stats::default()))),
             start: now,
+            silent: Rc::new(Cell::new(false)),
         }
     }
 
-    fn print(&self) {
+    /// Prints a line: always when `full`, otherwise only when something went
+    /// wrong since the last look (gaps, lost audio, the mic going silent).
+    fn print(&self, full: bool) {
         let now = Instant::now();
         let s = self.live.stats();
         let (then, prev) = self.last.replace((now, s.clone()));
         let wall = now.duration_since(then).as_secs_f64();
         let rate = self.live.rate;
-        let elapsed = now.duration_since(self.start).as_secs();
+        let t = now.duration_since(self.start).as_secs();
+        let elapsed = match t {
+            ..3600 => format!("{}:{:02}", t / 60, t % 60),
+            _ => format!("{}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60),
+        };
         let load = (s.busy - prev.busy).as_secs_f64() / wall * 100.;
         let mut line = format!(
-            "{:>2}:{:02}  chain {load:.1}% of a core (longest run {:.1} ms)  buffer {:.0} ms  block {:.1} ms",
-            elapsed / 60,
-            elapsed % 60,
+            "{elapsed:>5}  chain {load:.1}% of a core (longest run {:.1} ms)  buffer {:.0} ms  block {:.1} ms",
             s.worst.as_secs_f64() * 1000.,
             ms(s.waiting.saturating_sub(s.block), rate),
             ms(s.block, rate),
         );
-        if s.captured == prev.captured {
+        let mut problem = false;
+        let silent = s.captured == prev.captured;
+        if silent {
             line += "  NO AUDIO FROM THE MIC";
+            problem |= !self.silent.get();
+        } else if self.silent.get() {
+            line += "  the mic is back";
+            problem = true;
         }
+        self.silent.set(silent);
         for (name, now, before) in [
             ("gaps", s.gaps, prev.gaps),
             ("input dropped", s.dropped, prev.dropped),
         ] {
             if now > before {
                 line += &format!("  {name} {}", now - before);
+                problem = true;
             }
         }
         if s.skipped > prev.skipped {
             line += &format!("  skipped {:.0} ms", ms(s.skipped - prev.skipped, rate));
+            problem = true;
         }
-        eprintln!("{line}");
+        if full || problem {
+            eprintln!("{line}");
+        }
     }
 }

@@ -61,6 +61,22 @@ to fabrial the next time it runs, and to the headset when it doesn't.
 Building it needs `clang` and PipeWire's headers (Arch's `libpipewire`, which
 `pipewire` pulls in).
 
+### As a service
+
+`packaging/arch/PKGBUILD` builds an Arch package from the checkout it sits
+in. The package holds the binary, the chains (in `/usr/share/fabrial/chains/`)
+and a user service, `fabrial.service`, which starts and stops with PipeWire
+and restarts after a failure:
+
+```sh
+systemctl --user enable --now fabrial
+journalctl --user -u fabrial    # the mic it reads, the apps it moves, problems
+```
+
+As a service, it only logs a line when something goes wrong: gaps, lost
+audio, the mic going silent. To use another chain, override `ExecStart`
+with `systemctl --user edit fabrial`.
+
 ## Scripts
 
 - `scripts/record-easyeffects.sh [label]` records the headset's raw mic and

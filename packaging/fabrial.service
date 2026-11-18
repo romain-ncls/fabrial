@@ -1,0 +1,16 @@
+# fabrial as a user service: it starts and stops with PipeWire, and comes
+# back after a failure. To use another chain, override ExecStart in a
+# drop-in (systemctl --user edit fabrial).
+[Unit]
+Description=fabrial: the mic, cleaned up, as a virtual mic
+Documentation=https://github.com/romain-ncls/fabrial
+After=pipewire.service wireplumber.service
+BindsTo=pipewire.service
+
+[Service]
+ExecStart=/usr/bin/fabrial run --chain /usr/share/fabrial/chains/awpro-v3.toml --stats 0
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=pipewire.service

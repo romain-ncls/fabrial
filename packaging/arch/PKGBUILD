@@ -1,0 +1,32 @@
+# Maintainer: Romain Nicolas <nicolasromain0@gmail.com>
+
+# Builds from the checkout this file sits in: lodestar fetches the ref
+# into its cache and runs makepkg here (packaging/arch). The ref decides
+# what is built; bump pkgver on releases.
+pkgname=fabrial
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Mic enhancer for calls: noise removal and voice shaping, as a virtual mic'
+arch=(x86_64)
+url='https://github.com/romain-ncls/fabrial'
+license=(MIT)
+depends=(gcc-libs glibc libpipewire pipewire)
+# clang: bindgen reads PipeWire's headers. Cargo also fetches DeepFilterNet
+# from GitHub.
+makedepends=(cargo clang)
+options=(!debug !lto)
+
+build() {
+	cd "$startdir/../.."
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR="$srcdir/target"
+	cargo build --release --locked -p fabrial
+}
+
+package() {
+	cd "$startdir/../.."
+	install -Dm755 "$srcdir/target/release/fabrial" -t "$pkgdir/usr/bin/"
+	install -Dm644 chains/*.toml -t "$pkgdir/usr/share/fabrial/chains/"
+	install -Dm644 packaging/fabrial.service -t "$pkgdir/usr/lib/systemd/user/"
+	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

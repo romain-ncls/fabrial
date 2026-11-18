@@ -50,15 +50,15 @@
     `scripts/compare-render.sh` shows it matches. See
     [the copy](reference-chains.md#the-rust-copy-chainsawpro-v3toml).
   - There's also a limiter, for the planned fixes.
-- **Started: the virtual mic.**
+- **Done: the virtual mic.**
   - `fabrial run` runs a chain live and offers the result as a mic named
     "fabrial". `scripts/live-check.sh` shows it sends what the offline
     render sends (see [the copy](reference-chains.md#live)).
   - It moves the apps that record from the headset onto its mic, and puts
-    them back on exit. Tested with test streams on a fake mic, not yet in
-    a real call.
-  - **Next:** use it in real calls instead of EasyEffects, then run it as
-    a user service declared in `~/dotfiles`.
+    them back on exit. It replaced EasyEffects in a real call on
+    2026-11-18.
+  - An Arch package (`packaging/arch`) runs it as a user service that
+    starts with PipeWire.
   - **Delay:** the chain's thread adds one block (21 ms with PipeWire's
     usual 1024-sample block) on top of the chain's own 20 ms. So fabrial's
     mic lags EasyEffects' by about 21 ms.
@@ -67,7 +67,7 @@
     runs on the slow cores. The longest run seen was 15 ms, of the 21 ms a
     block allows.
   - **A gap at startup:** each start has one short gap, then none.
-- **Then the fixes:** apply the [planned fixes](reference-chains.md) to the
+- **Next: the fixes.** Apply the [planned fixes](reference-chains.md) to the
   chain, one at a time, each checked on the same takes.
 - **Recorder built in:**
   - the raw mic and every stage's output, sample-aligned, in one file
@@ -75,8 +75,9 @@
 - **Offline render:** any chain version on any raw take.
 - **Analysis in the app:** what `analyze-take.sh` does today, plus DNSMOS
   (Microsoft's quality predictor, itself an ONNX model).
-- **Packaging:** declared in `~/dotfiles` (`pkg: {git, ref, path}`), replacing
-  `easyeffects` in the media module.
+- **Packaging:** declared in `~/dotfiles` as its own module (`pkg: {git, ref,
+  path}`), with the service enabled. EasyEffects stays installed, but no
+  longer starts.
 
 ### 2. Better models
 

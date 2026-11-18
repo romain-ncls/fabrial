@@ -19,7 +19,8 @@ pub struct Args {
     /// to the delay.
     #[arg(long, default_value_t = 10.)]
     margin: f32,
-    /// Seconds between stats lines; 0 for none.
+    /// Seconds between stats lines; 0 to print one only when something goes
+    /// wrong (gaps, lost audio, the mic going silent).
     #[arg(long, default_value_t = 10)]
     stats: u64,
     /// Leave apps where they are. By default, apps that record from the mic
