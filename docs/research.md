@@ -19,7 +19,7 @@ spends most of its work on empty frequencies.
 | model | rate | latency | compute | params | quality (source) | weights | license |
 |---|---|---|---|---|---|---|---|
 | **DPDFNet-2 / 4 / 8** (Ceva, 2025) | 16 kHz (8 kHz; 48 kHz "hr" for -2, -8) | ~40 ms (20 ms window, 2-frame look-ahead) | 1.35 / 2.36 / 4.37 GMAC/s | 2.5 / 2.8 / 3.5 M | Ceva's 12-language low-SNR set: PESQ 3.14–3.20 vs DFN3 2.76; DNS4 blind DNSMOS OVRL 3.10–3.12 vs DFN3 2.96; VB-D PESQ 2.66–2.71 vs DFN3 2.80 but SI-SNR 23.6–24.1 vs 21.2 | PyTorch, ONNX, TFLite; streaming in sherpa-onnx (C API and Rust crate) | Apache-2.0, code and weights |
-| **DeepFilterNet3** (in use) | 48 kHz | 40 ms | ~0.35 GMAC/s | 2.1 M | VB-D PESQ 3.17 (own paper) | ONNX, run in Rust with tract | MIT/Apache-2.0, weights included |
+| **DeepFilterNet3** (the low-latency variant is in use) | 48 kHz | 40 ms (low-latency: 20 ms, no lookahead) | ~0.35 GMAC/s | 2.1 M | VB-D PESQ 3.17 (own paper) | ONNX, run in Rust with tract | MIT/Apache-2.0, weights included |
 | **FastEnhancer-T / B / S** (2025) | 16 and 48 kHz | 32 ms | 0.055 / 0.26 / 0.66 GMAC/s | 22 / 92 / 195 k | VB-D PESQ 2.99 / 3.13 / 3.19, same table as GTCRN 2.87 | PyTorch, ONNX | MIT |
 | **GTCRN** | 16 kHz | 32 ms | ~0.035 GMAC/s | 24–48 k | VB-D PESQ 2.87 | streaming ONNX, sherpa-onnx | MIT |
 | **UL-UNAS** | 16 kHz | 32 ms | 0.035 GMAC/s | 171 k | VB-D PESQ 3.09 | streaming ONNX (2026) | MIT |

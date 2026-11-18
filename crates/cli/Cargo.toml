@@ -1,0 +1,14 @@
+[package]
+name = "fabrial"
+version = "0.1.0"
+description = "Mic enhancer for calls"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+claxon = "0.4"
+clap = { version = "4", features = ["derive"] }
+fabrial-core = { path = "../core" }
+hound = "3"

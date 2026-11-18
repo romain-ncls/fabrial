@@ -31,11 +31,16 @@
 
 ### 1. Replace EasyEffects on Linux
 
-- **Virtual mic:** a PipeWire virtual source that apps pick like any mic.
-- **Chain:** DeepFilterNet3 plus native stages. Reproduce awpro-v3 first, then
-  apply the [planned fixes](reference-chains.md).
-- **Checking the copy:** render a recorded raw take through the Rust chain and
-  compare it with EasyEffects' recorded output.
+- **Done: the chain, offline.**
+  - `fabrial render` runs a recorded take through a chain file.
+  - `chains/awpro-v3.toml` copies EasyEffects' preset, and
+    `scripts/compare-render.sh` shows it matches. See
+    [the copy](reference-chains.md#the-rust-copy-chainsawpro-v3toml).
+  - There's also a limiter, for the planned fixes.
+- **Next: the virtual mic.** A PipeWire virtual source that apps pick like
+  any mic, running the same chain live.
+- **Then the fixes:** apply the [planned fixes](reference-chains.md) to the
+  chain, one at a time, each checked on the same takes.
 - **Recorder built in:**
   - the raw mic and every stage's output, sample-aligned, in one file
   - a rolling buffer of the last few minutes, with a shortcut to save it

@@ -1,0 +1,45 @@
+# The EasyEffects preset awpro-v3 (reference/easyeffects/awpro-v3.json),
+# stage for stage. PipeWire upsamples the headset's 16 kHz to 48 kHz before
+# EasyEffects, so this chain runs at 48 kHz too.
+name = "awpro-v3"
+description = "Copy of the EasyEffects preset in use: DeepFilterNet3, expander, EQ, compressor (+15 dB, no limiter)"
+rate = 48000
+
+[[stage]]
+type = "deepfilternet3"
+attenuation-limit = 80
+post-filter-beta = 0.02
+min-processing-threshold = -10
+max-erb-processing-threshold = 30
+max-df-processing-threshold = 20
+
+[[stage]]
+type = "expander"
+threshold = -50
+ratio = 2
+attack = 15
+release = 150
+knee = -6
+release-threshold = -80.01
+dry = -80.01 # EasyEffects' "off" for dry still sends -80 dB
+
+[[stage]]
+type = "equalizer"
+bands = [
+  { type = "hi-pass", mode = "rlc-bt", frequency = 50, q = 0.7 },
+  { type = "lo-shelf", mode = "rlc-mt", frequency = 90, gain = 3, q = 0.7 },
+  { type = "bell", mode = "bwc-mt", frequency = 425, gain = -2, q = 1, slope = 2 },
+  { type = "bell", mode = "bwc-bt", frequency = 3500, gain = 3, q = 0.7, slope = 2 },
+  { type = "hi-shelf", mode = "lrx-mt", frequency = 9000, gain = 2, q = 0.7 },
+]
+
+[[stage]]
+type = "compressor"
+threshold = -20
+ratio = 4
+attack = 5
+release = 75
+knee = -6
+makeup = 15
+release-threshold = -40
+dry = -80.01
