@@ -1,5 +1,7 @@
 mod audio;
 mod render;
+#[cfg(target_os = "linux")]
+mod run;
 
 use std::path::PathBuf;
 
@@ -17,11 +19,17 @@ struct Cli {
 enum Command {
     /// Runs a recorded take through a chain, as the live mic would have.
     Render(render::Args),
+    /// Runs a chain live: a virtual mic named "fabrial" that apps can record
+    /// from.
+    #[cfg(target_os = "linux")]
+    Run(run::Args),
 }
 
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Render(a) => render::run(a),
+        #[cfg(target_os = "linux")]
+        Command::Run(a) => run::run(a),
     }
 }
 

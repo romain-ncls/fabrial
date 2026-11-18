@@ -12,3 +12,6 @@ claxon = "0.4"
 clap = { version = "4", features = ["derive"] }
 fabrial-core = { path = "../core" }
 hound = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fabrial-pipewire = { path = "../pipewire" }

@@ -77,6 +77,21 @@ What still differs:
   
   Below the expander's threshold, those differences come out doubled.
 
+#### Live
+
+`scripts/live-check.sh` plays a stretch of the take as a fake mic, runs
+`fabrial run` on it, records the "fabrial" mic, and compares that with the
+offline render of the same stretch:
+
+| stretch | correlation | loudness, live vs offline | your voice, live − offline (median, p10, p90) | digital silence, live vs offline |
+|---|---|---|---|---|
+| 4:00–5:00 | 0.998 | -16.7 / -16.6 LUFS | -0.0, -1.1, +1.0 dB | 71.7 / 71.9 % |
+| 44:00–45:00 | 0.998 | -13.3 / -13.2 LUFS | -0.0, -1.3, +1.1 dB | 82.5 / 82.6 % |
+
+The differences come from the same causes as above: live, PipeWire
+converts the 16 kHz mic to 48 kHz, and DeepFilterNet's 10 ms frames start
+at a different point.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
 - **No limiter after +15 dB of makeup gain:** the output clips.

@@ -18,6 +18,19 @@
 - **No Python in the tooling:** shell, ffmpeg and gawk for scripts, Rust for
   the rest. Every model candidate ships ONNX, so no Python export step is
   needed.
+- **PipeWire through pipewire-rs for now, pipewire-native later.**
+  - pipewire-rs wraps PipeWire's C library. Building it needs `clang`, to
+    read PipeWire's C headers; running fabrial doesn't.
+  - [pipewire-native](https://docs.rs/pipewire-native/latest/) is PipeWire's
+    own Rust client, meant to become the official Rust API. Version 0.2.0
+    (September 2026) can't send or receive audio yet.
+  - **Switch when it can carry audio.** All the PipeWire code lives in
+    `crates/pipewire`, so the switch only rewrites that crate. The chain
+    and the hand-off to its thread (`fabrial_core::live`) don't depend on
+    PipeWire.
+- **Apps keep picking the headset, as with EasyEffects.** fabrial will move
+  the recording streams onto its virtual mic itself. Unlike EasyEffects, it
+  will only move the streams that asked for the headset.
 - **Recordings and model files are never committed.**
 
 ## Phases
@@ -37,8 +50,23 @@
     `scripts/compare-render.sh` shows it matches. See
     [the copy](reference-chains.md#the-rust-copy-chainsawpro-v3toml).
   - There's also a limiter, for the planned fixes.
-- **Next: the virtual mic.** A PipeWire virtual source that apps pick like
-  any mic, running the same chain live.
+- **Started: the virtual mic.**
+  - `fabrial run` runs a chain live and offers the result as a mic named
+    "fabrial". `scripts/live-check.sh` shows it sends what the offline
+    render sends (see [the copy](reference-chains.md#live)).
+  - It moves the apps that record from the headset onto its mic, and puts
+    them back on exit. Tested with test streams on a fake mic, not yet in
+    a real call.
+  - **Next:** use it in real calls instead of EasyEffects, then run it as
+    a user service declared in `~/dotfiles`.
+  - **Delay:** the chain's thread adds one block (21 ms with PipeWire's
+    usual 1024-sample block) on top of the chain's own 20 ms. So fabrial's
+    mic lags EasyEffects' by about 21 ms.
+  - **CPU:** live, the chain takes 14–19% of a core while you speak, but
+    offline only about 4%. The scheduler probably puts its small, regular
+    runs on the slow cores. The longest run seen was 15 ms, of the 21 ms a
+    block allows.
+  - **A gap at startup:** each start has one short gap, then none.
 - **Then the fixes:** apply the [planned fixes](reference-chains.md) to the
   chain, one at a time, each checked on the same takes.
 - **Recorder built in:**

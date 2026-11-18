@@ -40,6 +40,11 @@ recording showed.
   `systemd-run --user --scope -p MemoryMax=…`. Parallel heavy jobs have
   frozen this machine before.
 - **Claude cannot run sudo:** ask Romain to run anything that needs root.
+- **Live tests:** use `scripts/live-check.sh`, which feeds a take in as a
+  fake mic. Don't test on the real mic: Romain may be in a call. Anything
+  that plays audio must target an explicit node, with `node.dont-fallback`,
+  or WirePlumber sends it to the headset's speakers. An early `fabrial run`
+  did exactly that.
 
 ## Git
 

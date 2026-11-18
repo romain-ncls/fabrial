@@ -1,0 +1,13 @@
+[package]
+name = "fabrial-pipewire"
+version = "0.1.0"
+description = "fabrial's live path on Linux: the PipeWire streams around the chain"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fabrial-core = { path = "../core" }
+libc = "0.2"
+pipewire = { version = "0.10", features = ["v1_2_0"] }

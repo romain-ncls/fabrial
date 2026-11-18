@@ -3,8 +3,9 @@
 A microphone enhancer for calls: it removes the noise around you, shapes your
 voice, and offers the result as a virtual microphone that any app can use.
 
-**Status: early.** The Rust chain runs offline on recorded takes, to check it
-against the current setup (EasyEffects); the live microphone comes next. See
+**Status: early.** The Rust chain copies the current setup (EasyEffects). It
+runs offline on recorded takes, or live as a virtual microphone that apps
+are moved onto. Using it in real calls comes next. See
 [the roadmap](docs/roadmap.md).
 
 ## Goals
@@ -36,6 +37,30 @@ It writes `<take>/renders/<chain>[-<from>-<to>]/`:
 Every file has the chain's delay removed, so it lines up with the raw input
 sample for sample.
 
+## Live
+
+```sh
+target/release/fabrial run --chain chains/<name>.toml [--mic <node name>]
+```
+
+It reads the default mic (or `--mic`) and offers the chain's output as a
+mic named "fabrial" (`fabrial_source` in PipeWire), until Ctrl+C. Every 10
+seconds it prints the CPU the chain takes, the buffer it adds, and any gaps.
+
+Apps keep picking the headset. Whenever an app records from the mic fabrial
+reads, fabrial moves it onto its own mic, and puts it back on exit. It
+leaves alone the streams that refuse to move (recorders such as
+`scripts/record-easyeffects.sh`), level meters, and streams on other mics.
+`--no-move` turns this off.
+
+Next to EasyEffects: the apps that WirePlumber already sends to EasyEffects'
+mic stay there. Quit EasyEffects, and they come back to the headset, then
+to fabrial. WirePlumber remembers each app's mic, so they also go straight
+to fabrial the next time it runs, and to the headset when it doesn't.
+
+Building it needs `clang` and PipeWire's headers (Arch's `libpipewire`, which
+`pipewire` pulls in).
+
 ## Scripts
 
 - `scripts/record-easyeffects.sh [label]` records the headset's raw mic and
@@ -47,6 +72,9 @@ sample for sample.
 - `scripts/compare-render.sh <take-dir> <render-dir>` compares a render with
   what EasyEffects sent for the same stretch, sorted by raw level, with
   spectrograms of the raw input, the render and EasyEffects.
+- `scripts/live-check.sh <take-dir> [chain] [from] [seconds]` plays a stretch
+  of a take as a fake mic, runs `fabrial run` on it, and compares what the
+  "fabrial" mic sent with the offline render. It doesn't touch the real mic.
 
 Recordings never go into this repo: they hold the voices of people nearby.
 
