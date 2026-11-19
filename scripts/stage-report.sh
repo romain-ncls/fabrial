@@ -4,6 +4,9 @@
 # - by raw input level: how much each stage changes the level;
 # - on your voice: how much that change varies (a fixed gain doesn't vary,
 #   a compressor at work does), and how often peaks pass full scale;
+# - the ends and starts of your phrases (around a pause of 0.5 s or more):
+#   how much each stage lowers them, since a gate that cuts the quiet last
+#   word of a sentence is the worst thing it can do;
 # - between your words (at least 1 s from your voice): how much sound is
 #   left after each stage, and how loud;
 # - after each stage: loudness, true peak and digital silence.
@@ -32,6 +35,16 @@ gawk -v SP="$SPEECH_DB" -v N="$n" -v names="input ${names[*]}" -v lf="$s/loudnes
 function q(S, k, f,   A) { asort(S, A); return A[int((k-1)*f)+1] }
 function rms(c) { return $(3*c+2) }
 function pk(c) { return $(3*c+3) }
+function cl(x) { return x < -100 ? -100 : x }
+# How much each stage lowers the windows W[1..n] that still have sound.
+function edge(title, what, W, n,   c, j, k, x, A, big) {
+  printf "\n%s (%s; %d windows with sound in the raw input):\n\n", title, what, n
+  printf "%-20s %8s %8s %18s\n", "stage", "median", "p10", "lowered > 6 dB"
+  for (c = 1; c <= N; c++) { k = 0; big = 0; delete A
+    for (j = 1; j <= n; j++) { if (L[c-1, W[j]] <= -100) continue
+      x = cl(L[c, W[j]]) - cl(L[c-1, W[j]]); A[++k] = x; if (x < -6) big++ }
+    if (k) printf "%-20s %+8.1f %+8.1f %16.1f %%\n", name[c+1], q(A, k, 0.5), q(A, k, 0.1), 100*big/k
+    else printf "%-20s %8s\n", name[c+1], "silent" } }
 BEGIN { split(names, name, " ")
   for (c = 0; c <= N; c++) { getline line < lf; split(line, F, " "); I[c] = F[1]; TP[c] = F[3] } }
 { w = rms(0); t++
@@ -75,4 +88,13 @@ END {
     for (j = 1; j <= na; j++) { x = L[c, away[j]]; if (x <= -120) s0++; else e += 10^(x/10); if (x > top) top = x }
     printf "%-20s %14.1f %% %20.1f %16.1f\n", name[c+1], 100*s0/na, (e > 0 ? 10*log(e/na)/log(10) : -120), top }
   printf "\n(average level: the power average over that time, silence included.)\n"
+
+  # Phrase ends: up to 0.6 s after a window of your voice that no other
+  # follows for 0.5 s. Starts: up to 0.3 s before one that none precedes.
+  for (i = 1; i <= t; i++) if (vo[i]) {
+    z = i + 50 > t ? t : i + 50; if (pre[z] - pre[i] == 0) for (j = i + 1; j <= i + 60 && j <= t; j++) if (L[0, j] > -65) tail[++nt] = j
+    a = i - 50 < 1 ? 1 : i - 50; if (i > 1 && pre[i-1] - pre[a-1] == 0) for (j = i - 30; j < i; j++) if (j >= 1 && L[0, j] > -65) head[++nh] = j }
+  edge("Ends of your phrases", "up to 0.6 s after your voice, before a pause", tail, nt)
+  edge("Starts of your phrases", "up to 0.3 s before your voice, after a pause", head, nh)
+  printf "\n(how much each stage lowers those windows; a window it silences counts\n as lowered down to -100 dB.)\n"
 }' | tee "$s/report.txt"

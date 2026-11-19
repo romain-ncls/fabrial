@@ -154,6 +154,25 @@ the sounds it's there for. A level gate can't catch the nearby voices that
 are as loud as the quiet parts of your voice: that needs to know whose
 voice it is ([phase 4](roadmap.md#4-voices-nearby)).
 
+#### The edges of your phrases
+
+A gate must never cut the quiet last word of a sentence, nor the first
+sound of one. `stage-report.sh` measures both: the windows with sound up to
+0.6 s after your voice before a pause of at least 0.5 s, and up to 0.3 s
+before it after one.
+
+- **Ends: DeepFilterNet cuts, not the expander.** DeepFilterNet lowers 15 to
+  26 % of those windows by more than 6 dB. They are the fading tail of the
+  last syllable: about -62 dBFS raw, some 20 dB under your voice, 50 to
+  120 ms after it. Removing them makes phrases stop abruptly. Its
+  attenuation limit (80 dB, so it may remove them entirely) is the setting
+  to look at. The expander, with its 150 ms release, leaves ends alone.
+- **Starts: the expander cuts.** In the two clean stretches, the sound just
+  before your voice is the start of the word itself, at about -49 dBFS,
+  within 50 ms of it. Before a phrase, the expander is closed and takes its
+  15 ms attack to open, so it lowers those first 10 to 20 ms by about
+  16 dB: the first sound of each phrase loses its edge.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
 - **No limiter after +15 dB of makeup gain:** the output clips.
