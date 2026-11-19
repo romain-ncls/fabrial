@@ -173,6 +173,43 @@ before it after one.
   15 ms attack to open, so it lowers those first 10 to 20 ms by about
   16 dB: the first sound of each phrase loses its edge.
 
+#### Gate settings tried
+
+Only the expander changes; the rest is awpro-v3. "Gaps" is the time at
+least 1 s from your voice in 51:00–57:00, after the gate (before it,
+after DeepFilterNet: -79.0 dBFS on average). "Cut" is the share of
+windows the gate lowers by more than 6 dB, in the three stretches; for
+starts, only the two clean ones count, since in 51:00–57:00 the sound
+before a phrase is often a breath or a nearby voice.
+
+| variant | starts at | ratio | attack | release | lookahead | gaps: average, loudest (dBFS) | ends cut | starts cut |
+|---|---|---|---|---|---|---|---|---|
+| awpro-v3 | -50 dB | 2:1 | 15 ms | 150 ms | none | -80.9, -44.7 | 0–9 % | 91–100 % |
+| B | -50 dB | 4:1 | 15 ms | 150 ms | none | -82.2, -45.3 | 0–9 % | 91–100 % |
+| C | -50 dB | 4:1 | 5 ms | 400 ms | none | -80.7, -44.4 | 0–1 % | 64–93 % |
+| D | -45 dB | 4:1 | 5 ms | 400 ms | none | -85.6, -48.5 | 0–3 % | 82–100 % |
+| E | -55 dB | 8:1 | 5 ms | 400 ms | none | -80.1, -44.2 | 0 % | 46–71 % |
+| D | -45 dB | 4:1 | 5 ms | 400 ms | 5 ms | -85.0, -47.9 | 0–3 % | 36 % |
+| **D** | -45 dB | 4:1 | 5 ms | 400 ms | **10 ms** | **-84.5, -47.7** | **0–3 %** | **0–9 %** |
+| E | -55 dB | 8:1 | 5 ms | 400 ms | 10 ms | -79.4, -44.2 | 0 % | 0 % |
+
+- **A long release protects the ends:** the gate stays open through the
+  quiet tail of a phrase. It also stays open after a nearby voice, which
+  is why C catches less than B.
+- **Only a higher threshold catches more nearby voices:** D, at -45 dB,
+  lowers the gaps three times more than awpro-v3 and the loudest leak by
+  3 dB. Your voice and its quiet parts are not lowered at any level: they
+  come right after louder speech, while the gate is still open.
+- **Lookahead protects the starts:** the gate sees 10 ms ahead, so it is
+  open when the word starts. It adds 10 ms of delay.
+- **Without DeepFilterNet,** D with 10 ms of lookahead lowers the gaps
+  from -71.7 to -76.9 dBFS on average, against -74.7 for awpro-v3, cuts no
+  ends and no starts. It lowers faint noise, but the nearby voices stay:
+  the loudest is still at -40 dBFS.
+
+The candidate is D with 10 ms of lookahead, until listening says
+otherwise.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
 - **No limiter after +15 dB of makeup gain:** the output clips.
