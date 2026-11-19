@@ -67,8 +67,15 @@
     runs on the slow cores. The longest run seen was 15 ms, of the 21 ms a
     block allows.
   - **A gap at startup:** each start has one short gap, then none.
-- **Next: the fixes.** Apply the [planned fixes](reference-chains.md) to the
-  chain, one at a time, each checked on the same takes.
+- **Next: question each stage before adding new ones.**
+  `scripts/stage-report.sh` shows what each stage really does. In awpro-v3,
+  the expander does nothing, and the compressor is a fixed +15 dB boost
+  that clips (see
+  [what each stage does](reference-chains.md#what-each-stage-does)). Each
+  change is checked on the same takes, with numbers, then by ear at
+  matched loudness, since the louder version always sounds better. The
+  [planned fixes](reference-chains.md) come after, where they still make
+  sense.
 - **Recorder built in:**
   - the raw mic and every stage's output, sample-aligned, in one file
   - a rolling buffer of the last few minutes, with a shortcut to save it

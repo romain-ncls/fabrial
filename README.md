@@ -95,6 +95,10 @@ with `systemctl --user edit fabrial`.
 - `scripts/compare-render.sh <take-dir> <render-dir>` compares a render with
   what EasyEffects sent for the same stretch, sorted by raw level, with
   spectrograms of the raw input, the render and EasyEffects.
+- `scripts/stage-report.sh <render-dir>` shows what each stage of the chain
+  does, from a render made with `--taps`: how much it changes the level, by
+  raw input level and on your voice, where peaks pass full scale, and the
+  loudness after each stage.
 - `scripts/live-check.sh <take-dir> [chain] [from] [seconds]` plays a stretch
   of a take as a fake mic, runs `fabrial run` on it, and compares what the
   "fabrial" mic sent with the offline render. It doesn't touch the real mic,

@@ -92,6 +92,31 @@ The differences come from the same causes as above: live, PipeWire
 converts the 16 kHz mic to 48 kHz, and DeepFilterNet's 10 ms frames start
 at a different point.
 
+### What each stage does
+
+`scripts/stage-report.sh` measures how much each stage changes the level,
+10 ms by 10 ms, from a render made with `--taps`. On the two stretches of
+the first take:
+
+| stage | on your voice | on quieter sounds | in short |
+|---|---|---|---|
+| DeepFilterNet | no change | 1–7 dB lower between -72 and -42 dBFS raw; turns 61 % (4:00–6:00) and 88 % (44:00–47:00) of the time into digital silence | does the cleanup |
+| expander | no change | no change, wherever any sound is left | does nothing: DeepFilterNet already silences what it would lower |
+| EQ | ±1 dB | +0.2 to +0.9 dB | changes the tone, barely the level; to judge by ear |
+| compressor | +15 dB | +15 dB | a fixed volume boost: it lowers your voice by more than 1 dB 0.2 % of the time at 4:00–6:00 and 9.8 % at 44:00–47:00, never by more than 6 dB |
+
+Your voice sits mostly between -40 and -20 dBFS, under the compressor's
+-20 dB threshold, so the compressor does little more than add its +15 dB
+of makeup gain:
+
+- **It clips:** peaks pass full scale in 5.4 % of your voice at 4:00–6:00
+  and 28.5 % at 44:00–47:00 (true peaks +6.5 and +9.4 dBTP).
+- **It doesn't even out your level:** you were 5.7 dB louder at
+  44:00–47:00 than at 4:00–6:00 (-26.8 vs -32.5 LUFS raw), and the output
+  is still 4.8 dB louder (-13.1 vs -17.9 LUFS).
+- **It raises everything else by 15 dB too:** the clicks and the nearby
+  voices that DeepFilterNet lets through.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
 - **No limiter after +15 dB of makeup gain:** the output clips.
