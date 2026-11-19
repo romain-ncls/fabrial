@@ -192,6 +192,8 @@ before a phrase is often a breath or a nearby voice.
 | D | -45 dB | 4:1 | 5 ms | 400 ms | 5 ms | -85.0, -47.9 | 0–3 % | 36 % |
 | **D** | -45 dB | 4:1 | 5 ms | 400 ms | **10 ms** | **-84.5, -47.7** | **0–3 %** | **0–9 %** |
 | E | -55 dB | 8:1 | 5 ms | 400 ms | 10 ms | -79.4, -44.2 | 0 % | 0 % |
+| F | -45 dB | 3:1 | 5 ms | 400 ms | 10 ms | -82.9, -46.5 | 0–3 % | 0–9 % |
+| **F** | -45 dB | **2:1** | 5 ms | 400 ms | 10 ms | -81.2, -45.4 | 0–1 % | 0 % |
 
 - **A long release protects the ends:** the gate stays open through the
   quiet tail of a phrase. It also stays open after a nearby voice, which
@@ -207,8 +209,16 @@ before a phrase is often a breath or a nearby voice.
   ends and no starts. It lowers faint noise, but the nearby voices stay:
   the loudest is still at -40 dBFS.
 
-The candidate is D with 10 ms of lookahead, until listening says
-otherwise.
+**By ear** (blind, awpro-v3 against D with 10 ms of lookahead, on
+2026-11-19): the nearby voices sounded about the same. On phrase ends,
+awpro-v3 may have cut more smoothly. A 4:1 ratio closes three times faster
+than 2:1 once the voice stops, which can sound harder. The first excerpt
+couldn't be judged: the voice already cuts in the raw mic there (see
+[the take](takes/2026-11-17-meeting.md)).
+
+**Kept, in `chains/awpro-v4.toml`:** F at 2:1. It is as gentle as
+awpro-v3 and catches about as much, cuts neither ends nor starts, and adds
+10 ms of delay. D's extra catch wasn't audible.
 
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
