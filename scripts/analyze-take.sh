@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# First-pass analysis of a take from record-easyeffects.sh, with ffmpeg and gawk.
+# First-pass analysis of a take from record-take.sh, with ffmpeg and gawk.
 # Writes <take>/analysis/: report.txt, spectrograms (raw on top, processed below)
 # and the 10 ms envelopes it computed them from.
 # Usage: scripts/analyze-take.sh <take-dir>

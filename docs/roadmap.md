@@ -37,7 +37,7 @@
 
 ### 0. Measure the current setup (now)
 
-- Done: `scripts/record-easyeffects.sh` and `scripts/analyze-take.sh`, and the
+- Done: `scripts/record-take.sh` and `scripts/analyze-take.sh`, and the
   first take.
 - Next: more takes. One with the headset's noise reduction on, and one in a
   loud moment.

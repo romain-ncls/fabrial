@@ -57,7 +57,7 @@ prints the CPU the chain takes, the buffer it adds, and any gaps.
 Apps keep picking the headset. Whenever an app records from the mic fabrial
 reads, fabrial moves it onto its own mic, and puts it back on exit. It
 leaves alone the streams that refuse to move (recorders such as
-`scripts/record-easyeffects.sh`), level meters, and streams on other mics.
+`scripts/record-take.sh`), level meters, and streams on other mics.
 `--no-move` turns this off.
 
 Next to EasyEffects: the apps that WirePlumber already sends to EasyEffects'
@@ -86,9 +86,10 @@ with `systemctl --user edit fabrial`.
 
 ## Scripts
 
-- `scripts/record-easyeffects.sh [label]` records the headset's raw mic and
-  EasyEffects' output side by side, until Ctrl+C, into
-  `~/Documents/mic-takes/<date>-<label>/`.
+- `scripts/record-take.sh [label]` records the headset's raw mic and what
+  the call app receives (fabrial's mic, or EasyEffects'), side by side,
+  until Ctrl+C, into `~/Documents/mic-takes/<date>-<label>/`, with the chain
+  in use and the headset's state every 10 s.
 - `scripts/analyze-take.sh <take-dir>` compares the two: levels, clipping,
   loudness, how each input level is treated, what got through between your
   words, and spectrograms.
