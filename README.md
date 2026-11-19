@@ -43,9 +43,16 @@ sample for sample.
 target/release/fabrial run --chain chains/<name>.toml [--mic <node name>]
 ```
 
-It reads the default mic (or `--mic`) and offers the chain's output as a
-mic named "fabrial" (`fabrial_source` in PipeWire), until Ctrl+C. Every 10
-seconds it prints the CPU the chain takes, the buffer it adds, and any gaps.
+It reads the default mic and offers the chain's output as a mic named
+"fabrial" (`fabrial_source` in PipeWire), until Ctrl+C. Every 10 seconds it
+prints the CPU the chain takes, the buffer it adds, and any gaps.
+
+- **`--mic`** reads that mic and no other: if it's missing, fabrial stops
+  with an error instead of reading the default one.
+- **`--name`** changes the name, `fabrial_check` for example, so a second
+  run (a test) can go next to the one in use. It must read another mic.
+- **A muted mic** sends digital silence. After a second of it, the chain
+  stops running until sound comes back, so a muted mic costs almost no CPU.
 
 Apps keep picking the headset. Whenever an app records from the mic fabrial
 reads, fabrial moves it onto its own mic, and puts it back on exit. It
@@ -90,7 +97,8 @@ with `systemctl --user edit fabrial`.
   spectrograms of the raw input, the render and EasyEffects.
 - `scripts/live-check.sh <take-dir> [chain] [from] [seconds]` plays a stretch
   of a take as a fake mic, runs `fabrial run` on it, and compares what the
-  "fabrial" mic sent with the offline render. It doesn't touch the real mic.
+  "fabrial" mic sent with the offline render. It doesn't touch the real mic,
+  and runs next to a fabrial in use.
 
 Recordings never go into this repo: they hold the voices of people nearby.
 

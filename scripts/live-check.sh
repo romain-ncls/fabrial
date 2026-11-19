@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Checks the live path against the offline render, on a recorded take and
 # without touching the real mic:
-#   1. plays a stretch of the take's raw.flac as a temporary fake mic;
-#   2. runs `fabrial run` on that fake mic and records the "fabrial" mic;
+#   1. plays a stretch of the take's raw.flac as a temporary fake mic,
+#      after 3 s of digital silence, so the rest is ready when it starts;
+#   2. runs `fabrial run` on that fake mic, under the name fabrial_check so
+#      it can run next to a fabrial in use, and records its mic;
 #   3. renders the same stretch offline (`fabrial render`);
 #   4. lines both up and compares them, 10 ms window by 10 ms window.
 # Nothing is linked to a speaker; the script stops if anything is.
 # Writes <take>/renders/live-check-<chain>-<from>/: live.wav, fabrial.log,
 # the offline render and report.txt.
 # Usage: scripts/live-check.sh <take-dir> [chain, chains/awpro-v3.toml] [from, 4:00] [seconds, 60]
-# Needs a release build (cargo build --release) and no other fabrial running.
+# Needs a release build (cargo build --release) and no other live check running.
 set -euo pipefail
 take=${1:?usage: live-check.sh <take-dir> [chain] [from] [seconds]}
 chain=${2:-chains/awpro-v3.toml}
@@ -21,8 +23,8 @@ if [ -f "$chain" ]; then chain=$(realpath "$chain"); else chain="$here/$chain"; 
 . "$here/scripts/lib.sh"
 fabrial=$here/target/release/fabrial
 [ -x "$fabrial" ] || { echo "build first: cargo build --release" >&2; exit 1; }
-if pw-cli ls Node | grep -q 'node.name = "fabrial_source"'; then
-  echo "another fabrial is running: stop it first" >&2; exit 1
+if pw-cli ls Node | grep -q 'node.name = "fabrial_check_source"'; then
+  echo "another live check is running: stop it first" >&2; exit 1
 fi
 
 from_s=$(gawk -v t="$from" 'BEGIN{n=split(t,p,":"); s=0; for(i=1;i<=n;i++) s=s*60+p[i]; print s}')
@@ -36,25 +38,33 @@ trap cleanup EXIT
 
 echo "cutting ${secs} s from $from…"
 ffmpeg -v error -y -ss "$from_s" -t "$secs" -i "$take/raw.flac" -c:a pcm_s16le "$out/raw.wav"
+ffmpeg -v error -y -i "$out/raw.wav" -af adelay=delays=3s:all=1 -c:a pcm_s16le "$out/mic.wav"
 
 echo "live…"
 t0=$(date +%s)
 cd "$here"
+# The fake mic first: fabrial reads that mic and no other (it stops if
+# it is missing), so it never reads the real one.
+systemd-run --user --collect --unit=fabrial-check-play -q -p MemoryMax=1G \
+  pw-play -P '{ media.class = "Audio/Source", node.name = "fabrial_check_mic", node.description = "fabrial check mic", node.dont-move = true, priority.session = 0 }' "$out/mic.wav"
+sleep 1
 systemd-run --user --collect --unit=fabrial-check-run -q -p MemoryMax=2G --working-directory="$here" \
-  "$fabrial" run --chain "$chain" --mic fabrial_check_mic --stats 10
+  "$fabrial" run --chain "$chain" --name fabrial_check --mic fabrial_check_mic --stats 10
 sleep 1
 systemd-run --user --collect --unit=fabrial-check-rec -q -p MemoryMax=1G \
-  pw-record --target fabrial_source -P '{ node.dont-move = true }' --rate 48000 --channels 1 --format f32 "$out/live.wav"
+  pw-record --target fabrial_check_source -P '{ node.dont-move = true }' --rate 48000 --channels 1 --format f32 "$out/live.wav"
 sleep 1
-systemd-run --user --collect --unit=fabrial-check-play -q -p MemoryMax=1G \
-  pw-play -P '{ media.class = "Audio/Source", node.name = "fabrial_check_mic", node.description = "fabrial check mic", node.dont-move = true, priority.session = 0 }' "$out/raw.wav"
-sleep 2
 leak=$(pw-link -l | gawk '/^(fabrial|pw-play|pw-record)/{o=1; next} /^[^ ]/{o=0} o && /\|->/ && /alsa_output/')
 [ -z "$leak" ] || { echo "something reached a speaker, stopping: $leak" >&2; exit 1; }
 timeout $((secs + 30)) bash -c 'while systemctl --user is-active -q fabrial-check-play; do sleep 1; done'
 sleep 2
 cleanup
+rm -f "$out/mic.wav"
 journalctl --user -u fabrial-check-run --since "@$t0" --no-pager -o cat | grep -E '^fabrial:|^ *[0-9]+:[0-9]{2} ' > "$out/fabrial.log" || true
+if gawk '/^fabrial: reading / && $3 != "fabrial_check_mic" { bad = 1 } END { exit !bad }' "$out/fabrial.log"; then
+  rm -f "$out/live.wav"
+  echo "fabrial read another mic than the fake one: its recording is deleted" >&2; exit 1
+fi
 
 echo "offline…"
 "$fabrial" render "$out/raw.wav" --chain "$chain" --out "$out/render" > /dev/null

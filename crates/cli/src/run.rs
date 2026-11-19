@@ -11,7 +11,8 @@ pub struct Args {
     /// The chain file.
     #[arg(short, long)]
     chain: PathBuf,
-    /// The mic to read, by PipeWire node name. Default: the system's default
+    /// The mic to read, by PipeWire node name, and no other: while it is
+    /// missing, nothing is read. Default: the system's default
     /// mic.
     #[arg(long)]
     mic: Option<String>,
@@ -27,10 +28,16 @@ pub struct Args {
     /// are moved onto the "fabrial" mic.
     #[arg(long)]
     no_move: bool,
+    /// The name apps show for the virtual mic; its PipeWire node is
+    /// `<name>_source`. Only one run per name: a second one, for tests,
+    /// needs another name, and another mic to read.
+    #[arg(long, default_value = fabrial_pipewire::DEFAULT_NAME)]
+    name: String,
 }
 
 pub fn run(a: Args) -> Result<()> {
     fabrial_pipewire::run(fabrial_pipewire::Options {
+        name: a.name,
         chain: ChainFile::load(&a.chain)?,
         mic: a.mic,
         margin_ms: a.margin,

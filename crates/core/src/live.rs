@@ -17,6 +17,10 @@
 //! the delay doesn't grow. A smaller backlog that lasts a whole second is
 //! dropped too.
 //!
+//! While the mic sends digital silence (muted, say) for over a second, the
+//! chain has settled on silence too, so the worker stops running it and
+//! passes the silence on. It runs again on the first sample of sound.
+//!
 //! None of this is tied to an audio system: PipeWire's streams call it on
 //! Linux, and other systems' callbacks can later.
 
@@ -34,6 +38,10 @@ use crate::{Chain, ChainFile};
 /// How much each ring holds, in seconds.
 const RING_SECONDS: usize = 2;
 
+/// After this many seconds of digital silence in a row, the chain stops
+/// running until sound comes back.
+const IDLE_AFTER_SECONDS: usize = 1;
+
 /// What the threads count, shared between them. Samples unless noted.
 #[derive(Default)]
 struct Counters {
@@ -43,6 +51,8 @@ struct Counters {
     processed: AtomicU64,
     /// Time the worker spent in the chain, in ns.
     busy_ns: AtomicU64,
+    /// Digital silence passed on without running the chain.
+    idle: AtomicU64,
     /// The longest single run of the chain since the last `Live::stats`.
     worst_ns: AtomicU64,
     played: AtomicU64,
@@ -65,6 +75,8 @@ pub struct Stats {
     pub busy: Duration,
     /// The longest single run of the chain since the previous snapshot.
     pub worst: Duration,
+    /// Digital silence passed on without running the chain.
+    pub idle: u64,
     pub played: u64,
     pub gaps: u64,
     pub skipped: u64,
@@ -134,6 +146,9 @@ pub fn start(file: ChainFile, margin: usize) -> Result<(Live, Input, Output)> {
                     }
                 };
                 let mut buf = vec![0f32; capacity];
+                let idle_after = rate as usize * IDLE_AFTER_SECONDS;
+                // Digital silence in a row, in samples.
+                let mut zeros = 0usize;
                 while !stop.load(Relaxed) {
                     let n = in_rx.slots();
                     if n == 0 {
@@ -144,11 +159,18 @@ pub fn start(file: ChainFile, margin: usize) -> Result<(Live, Input, Output)> {
                     }
                     let buf = &mut buf[..n];
                     in_rx.pop_entire_slice(buf).expect("slots were counted");
-                    let t = Instant::now();
-                    chain.process(buf);
-                    let ns = t.elapsed().as_nanos() as u64;
-                    counters.busy_ns.fetch_add(ns, Relaxed);
-                    counters.worst_ns.fetch_max(ns, Relaxed);
+                    let silent = buf.iter().all(|&s| s == 0.);
+                    if silent && zeros >= idle_after {
+                        // `buf` already holds the silence the chain would send.
+                        counters.idle.fetch_add(n as u64, Relaxed);
+                    } else {
+                        let t = Instant::now();
+                        chain.process(buf);
+                        let ns = t.elapsed().as_nanos() as u64;
+                        counters.busy_ns.fetch_add(ns, Relaxed);
+                        counters.worst_ns.fetch_max(ns, Relaxed);
+                    }
+                    zeros = if silent { zeros.saturating_add(n) } else { 0 };
                     let (_, left) = out_tx.push_partial_slice(buf);
                     counters.skipped.fetch_add(left.len() as u64, Relaxed);
                     // Counted once the output can read them.
@@ -195,6 +217,7 @@ impl Live {
             processed: c.processed.load(Relaxed),
             busy: Duration::from_nanos(c.busy_ns.load(Relaxed)),
             worst: Duration::from_nanos(c.worst_ns.swap(0, Relaxed)),
+            idle: c.idle.load(Relaxed),
             played: c.played.load(Relaxed),
             gaps: c.gaps.load(Relaxed),
             skipped: c.skipped.load(Relaxed),
@@ -340,6 +363,42 @@ mod tests {
         }
         // The margin, rounded up to whole blocks.
         assert!(shift >= 480 && shift < 480 + block, "shift {shift}");
+    }
+
+    /// Sound, two seconds of digital silence, sound: the chain idles for
+    /// part of the silence, and the output still matches it.
+    #[test]
+    fn digital_silence_idles_the_chain() {
+        let sound = |i: usize| 0.3 * (i as f32 * 0.031).sin();
+        let x: Vec<f32> = (0..48_000)
+            .map(sound)
+            .chain(std::iter::repeat_n(0., 96_000))
+            .chain((0..48_000).map(sound))
+            .collect();
+        let mut offline = x.clone();
+        Chain::new(eq_chain()).unwrap().process(&mut offline);
+
+        let (live, mut input, mut output) = start(eq_chain(), 0).unwrap();
+        let block = 480;
+        let mut y = Vec::new();
+        for b in x.chunks(block) {
+            input.push(b.iter().copied());
+            while live.stats().processed < live.stats().captured {
+                thread::yield_now();
+            }
+            output.pull(b.len(), |s| y.push(s));
+        }
+        let stats = live.stats();
+        assert_eq!(stats.gaps, 0);
+        // One second of the silence runs the chain, the other is passed on.
+        assert_eq!(stats.idle, 48_000);
+
+        let shift = y.iter().position(|&s| s != 0.).unwrap()
+            - offline.iter().position(|&s| s != 0.).unwrap();
+        for i in 0..y.len() - shift {
+            let d = (y[i + shift] - offline[i]).abs();
+            assert!(d < 1e-6, "sample {i}: {} vs {}", y[i + shift], offline[i]);
+        }
     }
 
     #[test]

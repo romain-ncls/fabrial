@@ -42,12 +42,15 @@ use spa::pod::{Object, Pod, Value};
 
 mod mover;
 
-/// The virtual mic's node name, what `pactl` and `pw-record --target` use.
-pub const NODE_NAME: &str = "fabrial_source";
-/// The name apps show.
-pub const DESCRIPTION: &str = "fabrial";
+/// The name apps show for the virtual mic. Its node, what `pactl` and
+/// `pw-record --target` use, is this name with `_source` added.
+pub const DEFAULT_NAME: &str = "fabrial";
 
 pub struct Options {
+    /// The name apps show for the virtual mic. Its node is `<name>_source`,
+    /// and the stream that reads the mic `<name>_input`. A second run needs
+    /// another name.
+    pub name: String,
     pub chain: ChainFile,
     /// The mic to read, by node name. None: the default mic.
     pub mic: Option<String>,
@@ -66,8 +69,10 @@ pub fn run(opts: Options) -> Result<()> {
     let mainloop = pw::main_loop::MainLoopRc::new(None).context("starting PipeWire's loop")?;
     let context = pw::context::ContextRc::new(&mainloop, None)?;
     let core = context.connect_rc(None).context("connecting to PipeWire")?;
-    if already_running(&mainloop, &core) {
-        bail!("another fabrial is running: its mic, {NODE_NAME}, exists");
+    let name = opts.name.clone();
+    let source_name = format!("{name}_source");
+    if already_running(&mainloop, &core, &source_name) {
+        bail!("another fabrial is running: its mic, {source_name}, exists");
     }
     // Losing PipeWire, or a stream failing, ends the run with an error, so a
     // service manager restarts it.
@@ -107,10 +112,16 @@ pub fn run(opts: Options) -> Result<()> {
     let mut props = stream_props(&group);
     props.insert(*pw::keys::MEDIA_CATEGORY, "Capture");
     props.insert(*pw::keys::MEDIA_ROLE, "Communication");
-    props.insert(*pw::keys::NODE_NAME, "fabrial_input");
-    props.insert(*pw::keys::NODE_DESCRIPTION, "fabrial (reads the mic)");
+    props.insert(*pw::keys::NODE_NAME, format!("{name}_input"));
+    props.insert(
+        *pw::keys::NODE_DESCRIPTION,
+        format!("{name} (reads the mic)"),
+    );
     if let Some(mic) = &opts.mic {
         props.insert(*pw::keys::TARGET_OBJECT, mic.as_str());
+        // That mic or nothing: while it is missing, WirePlumber leaves the
+        // stream unlinked instead of falling back to the default mic.
+        props.insert("node.dont-fallback", "true");
     }
     let capture = StreamBox::new(&core, "fabrial-input", props)?;
     let _capture_listener = capture
@@ -149,8 +160,8 @@ pub fn run(opts: Options) -> Result<()> {
 
     let mut props = stream_props(&group);
     props.insert(*pw::keys::MEDIA_CLASS, "Audio/Source");
-    props.insert(*pw::keys::NODE_NAME, NODE_NAME);
-    props.insert(*pw::keys::NODE_DESCRIPTION, DESCRIPTION);
+    props.insert(*pw::keys::NODE_NAME, source_name.as_str());
+    props.insert(*pw::keys::NODE_DESCRIPTION, name.as_str());
     props.insert(*pw::keys::NODE_VIRTUAL, "true");
     // Never picked as the default mic on its own.
     props.insert(*pw::keys::PRIORITY_SESSION, "0");
@@ -212,7 +223,7 @@ pub fn run(opts: Options) -> Result<()> {
     )?;
 
     eprintln!(
-        "fabrial: virtual mic \"{DESCRIPTION}\" ({NODE_NAME}), reading {}, chain {chain_name} at {rate} Hz",
+        "fabrial: virtual mic \"{name}\" ({source_name}), reading {}, chain {chain_name} at {rate} Hz",
         opts.mic.as_deref().unwrap_or("the default mic"),
     );
     eprintln!(
@@ -338,9 +349,13 @@ fn report_state(what: &str, old: &StreamState, new: &StreamState, fail: &dyn Fn(
     }
 }
 
-/// Whether a node named like fabrial's mic already exists: two would
+/// Whether a node named `source_name` already exists: two would
 /// confuse apps, and both runs would move the same streams.
-fn already_running(mainloop: &pw::main_loop::MainLoopRc, core: &pw::core::CoreRc) -> bool {
+fn already_running(
+    mainloop: &pw::main_loop::MainLoopRc,
+    core: &pw::core::CoreRc,
+    source_name: &str,
+) -> bool {
     let found = Rc::new(Cell::new(false));
     let Ok(registry) = core.get_registry() else {
         return false;
@@ -349,8 +364,11 @@ fn already_running(mainloop: &pw::main_loop::MainLoopRc, core: &pw::core::CoreRc
         .add_listener_local()
         .global({
             let found = found.clone();
+            let source_name = source_name.to_string();
             move |global| {
-                if global.props.and_then(|p| p.get(*pw::keys::NODE_NAME)) == Some(NODE_NAME) {
+                if global.props.and_then(|p| p.get(*pw::keys::NODE_NAME))
+                    == Some(source_name.as_str())
+                {
                     found.set(true);
                 }
             }
@@ -406,6 +424,13 @@ impl Report {
             ms(s.waiting.saturating_sub(s.block), rate),
             ms(s.block, rate),
         );
+        let idle = s.idle - prev.idle;
+        if idle > 0 {
+            line += &format!(
+                "  idle {:.0} s (the mic sent digital silence)",
+                ms(idle, rate) / 1000.
+            );
+        }
         let mut problem = false;
         let silent = s.captured == prev.captured;
         if silent {
