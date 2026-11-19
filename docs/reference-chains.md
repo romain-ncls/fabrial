@@ -101,7 +101,7 @@ the first take:
 | stage | on your voice | on quieter sounds | in short |
 |---|---|---|---|
 | DeepFilterNet | no change | 1–7 dB lower between -72 and -42 dBFS raw; turns 61 % (4:00–6:00) and 88 % (44:00–47:00) of the time into digital silence | does the cleanup |
-| expander | no change | no change, wherever any sound is left | does nothing: DeepFilterNet already silences what it would lower |
+| expander | no change | no change, wherever any sound is left | does next to nothing: DeepFilterNet already silences what it would lower (see below) |
 | EQ | ±1 dB | +0.2 to +0.9 dB | changes the tone, barely the level; to judge by ear |
 | compressor | +15 dB | +15 dB | a fixed volume boost: it lowers your voice by more than 1 dB 0.2 % of the time at 4:00–6:00 and 9.8 % at 44:00–47:00, never by more than 6 dB |
 
@@ -116,6 +116,43 @@ of makeup gain:
   is still 4.8 dB louder (-13.1 vs -17.9 LUFS).
 - **It raises everything else by 15 dB too:** the clicks and the nearby
   voices that DeepFilterNet lets through.
+
+How much boost the voice needs: on 2026-11-18, with EasyEffects off and no
+boost at all, a coworker found the voice "a bit quiet", though less than
+they remembered. In Discord's Studio mode, Discord adds no gain control of
+its own, so people hear what fabrial sends. Teams' gain control can't be
+turned off.
+
+#### The expander as a gate under the voice
+
+The expander is meant as a gentle gate: it should lower anything quieter
+than the voice, as a safety net behind DeepFilterNet, and as the only
+cleanup when DeepFilterNet is off to save CPU. It matters most for nearby
+voices: they are speech, so DeepFilterNet keeps them.
+
+4:00–6:00 and 44:00–47:00 hold almost nothing between the words (-84 dBFS
+raw). 51:00–57:00 has nearby voices. In it:
+
+- **Your voice vs the rest, raw:** the quietest quarter of your speech sits
+  below -42 to -49 dBFS, the quietest tenth below -56 to -65. Sound at
+  least 1 s away from your voice has a median of -67 dBFS, 90 % of it is
+  below -56, and the loudest 10 ms reach -40. The two overlap at the
+  bottom of your voice.
+- **After DeepFilterNet:** 97 % of the time between your words becomes
+  digital silence. What's left peaks at -44 dBFS. The expander only lowers
+  the average of that time by 1.9 dB, and leaves the loudest unchanged.
+- **Without DeepFilterNet** (`v3-no-dfn`): the expander lowers the faint
+  sounds a lot (18 dB at -72 to -66 dBFS raw) but the louder ones, the ones
+  you can hear, barely or not at all (5 dB at -60 to -54, none above -54).
+  The average between your words only drops by 3 dB, and the loudest
+  stays at -40 dBFS, then -25 dBFS after the +15 dB.
+- **CPU:** without DeepFilterNet, the chain renders at 342× real time,
+  against 11× with it.
+
+So the safety net is needed, but its -50 dB threshold and 2:1 ratio miss
+the sounds it's there for. A level gate can't catch the nearby voices that
+are as loud as the quiet parts of your voice: that needs to know whose
+voice it is ([phase 4](roadmap.md#4-voices-nearby)).
 
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 

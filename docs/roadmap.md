@@ -69,8 +69,8 @@
   - **A gap at startup:** each start has one short gap, then none.
 - **Next: question each stage before adding new ones.**
   `scripts/stage-report.sh` shows what each stage really does. In awpro-v3,
-  the expander does nothing, and the compressor is a fixed +15 dB boost
-  that clips (see
+  the expander is set too low to catch the nearby voices it's there for,
+  and the compressor is a fixed +15 dB boost that clips (see
   [what each stage does](reference-chains.md#what-each-stage-does)). Each
   change is checked on the same takes, with numbers, then by ear at
   matched loudness, since the louder version always sounds better. The
@@ -115,3 +115,8 @@
 - **Windows:** a VST2 build for Equalizer APO first, a signed driver only if
   it proves worth it.
 - **Light mode:** FastEnhancer-T or GTCRN for weak laptops.
+- **Call apps' own settings:** fabrial knows which apps it moves. For each
+  known one, it should suggest the settings that keep the app from
+  processing the voice a second time. For example: Discord's Studio input
+  profile turns off its noise suppression and gain control. Teams exposes
+  no such setting.

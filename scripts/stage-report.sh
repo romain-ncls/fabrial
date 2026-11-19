@@ -4,6 +4,8 @@
 # - by raw input level: how much each stage changes the level;
 # - on your voice: how much that change varies (a fixed gain doesn't vary,
 #   a compressor at work does), and how often peaks pass full scale;
+# - between your words (at least 1 s from your voice): how much sound is
+#   left after each stage, and how loud;
 # - after each stage: loudness, true peak and digital silence.
 # Writes <render>/stages/report.txt and the envelopes.
 # Usage: scripts/stage-report.sh <render-dir>
@@ -31,9 +33,10 @@ function q(S, k, f,   A) { asort(S, A); return A[int((k-1)*f)+1] }
 function rms(c) { return $(3*c+2) }
 function pk(c) { return $(3*c+3) }
 BEGIN { split(names, name, " ")
-  for (c = 0; c <= N; c++) { getline line < lf; split(line, L, " "); I[c] = L[1]; TP[c] = L[3] } }
+  for (c = 0; c <= N; c++) { getline line < lf; split(line, F, " "); I[c] = F[1]; TP[c] = F[3] } }
 { w = rms(0); t++
-  for (c = 0; c <= N; c++) if (rms(c) <= -120) sil[c]++
+  vo[t] = w > SP
+  for (c = 0; c <= N; c++) { L[c, t] = rms(c); if (rms(c) <= -120) sil[c]++ }
   if (w < -90) next
   b = int((w + 120) / 6); cnt[b]++
   for (c = 1; c <= N; c++) if (rms(c) <= -120) gone[b, c]++
@@ -62,4 +65,14 @@ END {
   printf "\n(median, p10, p90: how much the stage changes your voice\x27s level. When\n p10 and p90 are close, the stage acts as a fixed volume change.)\n\n"
   printf "After each stage, over the whole stretch:\n\n%-20s %10s %12s %16s\n", "", "LUFS", "true peak", "digital silence"
   for (c = 0; c <= N; c++) printf "%-20s %10s %12s %14.1f %%\n", name[c+1], I[c], TP[c], 100*sil[c]/t
+  # Windows at least 1 s (100 windows) from any window of your voice.
+  for (i = 1; i <= t; i++) pre[i] = pre[i-1] + vo[i]
+  for (i = 1; i <= t; i++) { a = i - 100 < 1 ? 1 : i - 100; z = i + 100 > t ? t : i + 100
+    if (pre[z] - pre[a-1] == 0) away[++na] = i }
+  printf "\nBetween your words (at least 1 s from your voice, %.1f s):\n\n", na/100
+  printf "%-20s %16s %20s %16s\n", "", "digital silence", "average level (dB)", "loudest 10 ms"
+  for (c = 0; c <= N; c++) { e = 0; s0 = 0; top = -120
+    for (j = 1; j <= na; j++) { x = L[c, away[j]]; if (x <= -120) s0++; else e += 10^(x/10); if (x > top) top = x }
+    printf "%-20s %14.1f %% %20.1f %16.1f\n", name[c+1], 100*s0/na, (e > 0 ? 10*log(e/na)/log(10) : -120), top }
+  printf "\n(average level: the power average over that time, silence included.)\n"
 }' | tee "$s/report.txt"
