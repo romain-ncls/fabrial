@@ -37,7 +37,7 @@
 
 ### 0. Measure the current setup (now)
 
-- Done: `scripts/record-easyeffects.sh` and `scripts/analyze-take.sh`, and the
+- Done: `scripts/record-take.sh` and `scripts/analyze-take.sh`, and the
   first take.
 - Next: more takes. One with the headset's noise reduction on, and one in a
   loud moment.
@@ -67,8 +67,19 @@
     runs on the slow cores. The longest run seen was 15 ms, of the 21 ms a
     block allows.
   - **A gap at startup:** each start has one short gap, then none.
-- **Next: the fixes.** Apply the [planned fixes](reference-chains.md) to the
-  chain, one at a time, each checked on the same takes.
+- **Next: question each stage before adding new ones.**
+  `scripts/stage-report.sh` shows what each stage really does. In awpro-v3,
+  the expander is set too low to catch the nearby voices it's there for,
+  and the compressor is a fixed +15 dB boost that clips (see
+  [what each stage does](reference-chains.md#what-each-stage-does)). Each
+  change is checked on the same takes, with numbers, then by ear at
+  matched loudness, since the louder version always sounds better. The
+  [planned fixes](reference-chains.md) come after, where they still make
+  sense.
+  The reviewed chain grows in `chains/awpro-v4.toml`: so far, a gentle
+  gate that keeps the edges of phrases, and a compressor and limiter that
+  even out the voice without clipping. Next: DeepFilterNet's attenuation
+  limit (it cuts the fading ends of phrases), then the EQ.
 - **Recorder built in:**
   - the raw mic and every stage's output, sample-aligned, in one file
   - a rolling buffer of the last few minutes, with a shortcut to save it
@@ -108,3 +119,8 @@
 - **Windows:** a VST2 build for Equalizer APO first, a signed driver only if
   it proves worth it.
 - **Light mode:** FastEnhancer-T or GTCRN for weak laptops.
+- **Call apps' own settings:** fabrial knows which apps it moves. For each
+  known one, it should suggest the settings that keep the app from
+  processing the voice a second time. For example: Discord's Studio input
+  profile turns off its noise suppression and gain control. Teams exposes
+  no such setting.

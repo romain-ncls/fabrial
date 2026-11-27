@@ -12,8 +12,9 @@ envelope() { # in, prefilter (ends with a comma, or empty), samples per 10 ms, o
 peak() { ffmpeg -nostats -i "$1" -af "pan=mono|c0=c0,astats=measure_perchannel=none:measure_overall=Peak_level+Peak_count" -f null - 2>&1 |
   gawk '/Peak level dB/{l=$NF} /Peak count/{c=$NF} END{printf "%s %d\n", l, c}'; }
 
-# "integrated-LUFS LRA true-peak" (EBU R128).
-loud() { ffmpeg -nostats -i "$1" -af ebur128=peak=true -f null - 2>&1 |
+# "integrated-LUFS LRA true-peak" (EBU R128), after an optional prefilter
+# (ends with a comma).
+loud() { ffmpeg -nostats -i "$1" -af "${2:-}ebur128=peak=true" -f null - 2>&1 |
   gawk '/Summary/{s=1} s&&/ I:/{i=$2} s&&/LRA:/{r=$2} s&&/Peak:/{p=$2} END{printf "%s %s %s\n", i, r, p}'; }
 
 # Duration in seconds.

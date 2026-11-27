@@ -92,9 +92,200 @@ The differences come from the same causes as above: live, PipeWire
 converts the 16 kHz mic to 48 kHz, and DeepFilterNet's 10 ms frames start
 at a different point.
 
+### What each stage does
+
+`scripts/stage-report.sh` measures how much each stage changes the level,
+10 ms by 10 ms, from a render made with `--taps`. On the two stretches of
+the first take:
+
+| stage | on your voice | on quieter sounds | in short |
+|---|---|---|---|
+| DeepFilterNet | no change | 1–7 dB lower between -72 and -42 dBFS raw; turns 61 % (4:00–6:00) and 88 % (44:00–47:00) of the time into digital silence | does the cleanup |
+| expander | no change | no change, wherever any sound is left | does next to nothing: DeepFilterNet already silences what it would lower (see below) |
+| EQ | ±1 dB | +0.2 to +0.9 dB | changes the tone, barely the level; to judge by ear |
+| compressor | +15 dB | +15 dB | a fixed volume boost: it lowers your voice by more than 1 dB 0.2 % of the time at 4:00–6:00 and 9.8 % at 44:00–47:00, never by more than 6 dB |
+
+Your voice sits mostly between -40 and -20 dBFS, under the compressor's
+-20 dB threshold, so the compressor does little more than add its +15 dB
+of makeup gain:
+
+- **It clips:** peaks pass full scale in 5.4 % of your voice at 4:00–6:00
+  and 28.5 % at 44:00–47:00 (true peaks +6.5 and +9.4 dBTP).
+- **It doesn't even out your level:** you were 5.7 dB louder at
+  44:00–47:00 than at 4:00–6:00 (-26.8 vs -32.5 LUFS raw), and the output
+  is still 4.8 dB louder (-13.1 vs -17.9 LUFS).
+- **It raises everything else by 15 dB too:** the clicks and the nearby
+  voices that DeepFilterNet lets through.
+
+How much boost the voice needs: on 2026-11-18, with EasyEffects off and no
+boost at all, a coworker found the voice "a bit quiet", though less than
+they remembered. In Discord's Studio mode, Discord adds no gain control of
+its own, so people hear what fabrial sends. Teams' gain control can't be
+turned off.
+
+#### The expander as a gate under the voice
+
+The expander is meant as a gentle gate: it should lower anything quieter
+than the voice, as a safety net behind DeepFilterNet, and as the only
+cleanup when DeepFilterNet is off to save CPU. It matters most for nearby
+voices: they are speech, so DeepFilterNet keeps them.
+
+4:00–6:00 and 44:00–47:00 hold almost nothing between the words (-84 dBFS
+raw). 51:00–57:00 has nearby voices. In it:
+
+- **Your voice vs the rest, raw:** the quietest quarter of your speech sits
+  below -42 to -49 dBFS, the quietest tenth below -56 to -65. Sound at
+  least 1 s away from your voice has a median of -67 dBFS, 90 % of it is
+  below -56, and the loudest 10 ms reach -40. The two overlap at the
+  bottom of your voice.
+- **After DeepFilterNet:** 97 % of the time between your words becomes
+  digital silence. What's left peaks at -44 dBFS. The expander only lowers
+  the average of that time by 1.9 dB, and leaves the loudest unchanged.
+- **Without DeepFilterNet** (`v3-no-dfn`): the expander lowers the faint
+  sounds a lot (18 dB at -72 to -66 dBFS raw) but the louder ones, the ones
+  you can hear, barely or not at all (5 dB at -60 to -54, none above -54).
+  The average between your words only drops by 3 dB, and the loudest
+  stays at -40 dBFS, then -25 dBFS after the +15 dB.
+- **CPU:** without DeepFilterNet, the chain renders at 342× real time,
+  against 11× with it.
+
+So the safety net is needed, but its -50 dB threshold and 2:1 ratio miss
+the sounds it's there for. A level gate can't catch the nearby voices that
+are as loud as the quiet parts of your voice: that needs to know whose
+voice it is ([phase 4](roadmap.md#4-voices-nearby)).
+
+#### The edges of your phrases
+
+A gate must never cut the quiet last word of a sentence, nor the first
+sound of one. `stage-report.sh` measures both: the windows with sound up to
+0.6 s after your voice before a pause of at least 0.5 s, and up to 0.3 s
+before it after one.
+
+- **Ends: DeepFilterNet cuts, not the expander.** DeepFilterNet lowers 15 to
+  26 % of those windows by more than 6 dB. They are the fading tail of the
+  last syllable: about -62 dBFS raw, some 20 dB under your voice, 50 to
+  120 ms after it. Removing them makes phrases stop abruptly. Its
+  attenuation limit (80 dB, so it may remove them entirely) is the setting
+  to look at. The expander, with its 150 ms release, leaves ends alone.
+- **Starts: the expander cuts.** In the two clean stretches, the sound just
+  before your voice is the start of the word itself, at about -49 dBFS,
+  within 50 ms of it. Before a phrase, the expander is closed and takes its
+  15 ms attack to open, so it lowers those first 10 to 20 ms by about
+  16 dB: the first sound of each phrase loses its edge.
+
+#### Gate settings tried
+
+Only the expander changes; the rest is awpro-v3. "Gaps" is the time at
+least 1 s from your voice in 51:00–57:00, after the gate (before it,
+after DeepFilterNet: -79.0 dBFS on average). "Cut" is the share of
+windows the gate lowers by more than 6 dB, in the three stretches; for
+starts, only the two clean ones count, since in 51:00–57:00 the sound
+before a phrase is often a breath or a nearby voice.
+
+| variant | starts at | ratio | attack | release | lookahead | gaps: average, loudest (dBFS) | ends cut | starts cut |
+|---|---|---|---|---|---|---|---|---|
+| awpro-v3 | -50 dB | 2:1 | 15 ms | 150 ms | none | -80.9, -44.7 | 0–9 % | 91–100 % |
+| B | -50 dB | 4:1 | 15 ms | 150 ms | none | -82.2, -45.3 | 0–9 % | 91–100 % |
+| C | -50 dB | 4:1 | 5 ms | 400 ms | none | -80.7, -44.4 | 0–1 % | 64–93 % |
+| D | -45 dB | 4:1 | 5 ms | 400 ms | none | -85.6, -48.5 | 0–3 % | 82–100 % |
+| E | -55 dB | 8:1 | 5 ms | 400 ms | none | -80.1, -44.2 | 0 % | 46–71 % |
+| D | -45 dB | 4:1 | 5 ms | 400 ms | 5 ms | -85.0, -47.9 | 0–3 % | 36 % |
+| **D** | -45 dB | 4:1 | 5 ms | 400 ms | **10 ms** | **-84.5, -47.7** | **0–3 %** | **0–9 %** |
+| E | -55 dB | 8:1 | 5 ms | 400 ms | 10 ms | -79.4, -44.2 | 0 % | 0 % |
+| F | -45 dB | 3:1 | 5 ms | 400 ms | 10 ms | -82.9, -46.5 | 0–3 % | 0–9 % |
+| **F** | -45 dB | **2:1** | 5 ms | 400 ms | 10 ms | -81.2, -45.4 | 0–1 % | 0 % |
+
+- **A long release protects the ends:** the gate stays open through the
+  quiet tail of a phrase. It also stays open after a nearby voice, which
+  is why C catches less than B.
+- **Only a higher threshold catches more nearby voices:** D, at -45 dB,
+  lowers the gaps three times more than awpro-v3 and the loudest leak by
+  3 dB. Your voice and its quiet parts are not lowered at any level: they
+  come right after louder speech, while the gate is still open.
+- **Lookahead protects the starts:** the gate sees 10 ms ahead, so it is
+  open when the word starts. It adds 10 ms of delay.
+- **Without DeepFilterNet,** D with 10 ms of lookahead lowers the gaps
+  from -71.7 to -76.9 dBFS on average, against -74.7 for awpro-v3, cuts no
+  ends and no starts. It lowers faint noise, but the nearby voices stay:
+  the loudest is still at -40 dBFS.
+
+**By ear** (blind, awpro-v3 against D with 10 ms of lookahead, on
+2026-11-19): the nearby voices sounded about the same. On phrase ends,
+awpro-v3 may have cut more smoothly. A 4:1 ratio closes three times faster
+than 2:1 once the voice stops, which can sound harder. The first excerpt
+couldn't be judged: the voice already cuts in the raw mic there (see
+[the take](takes/2026-11-17-meeting.md)).
+
+**Kept, in `chains/awpro-v4.toml`:** F at 2:1. It is as gentle as
+awpro-v3 and catches about as much, cuts neither ends nor starts, and adds
+10 ms of delay. D's extra catch wasn't audible.
+
+#### Volume: an even voice, without clipping
+
+awpro-v3's compressor starts at -20 dB, above most of your voice, so it
+acts as a fixed +15 dB, and nothing stops the peaks (see above). The goal:
+your quiet phrases as loud as today, your loud ones brought down, nothing
+over full scale.
+
+**How it was tried:** DeepFilterNet, the gate and the EQ of awpro-v4 ran
+once over the whole take (57 minutes, 88 s of your voice). Each compressor
+then ran on that, followed by a limiter at -1 dBFS, with the makeup that
+brings the voice to about -18 LUFS. The "spread" is how far apart your
+quiet and loud moments are: the level of the 400 ms blocks where you talk,
+loud (p90) minus quiet (p10), from `stage-report.sh`'s "How even your voice
+is". Raw, it is 12.1 dB. The loudness range (LRA) isn't used: it counts
+the nearby voices too, so where you talk little, it measures the office.
+
+| compressor | makeup | quiet / loud phrases (dBFS) | spread | true peak | limiter: voice lowered > 1 dB, > 3 dB, at most |
+|---|---|---|---|---|---|
+| awpro-v3: -20 dB, 4:1, no limiter | +15 | -21.4 / -10.1 | 11.3 dB | +10.9 dBTP | |
+| awpro-v3's, less makeup | +12.2 | -24.2 / -14.7 | 9.4 dB | -0.8 dBTP | 12.1 %, 3.5 %, 8.0 dB |
+| -30 dB, 2:1, 10 ms attack | +14.9 | -21.9 / -15.0 | 7.0 dB | -0.8 dBTP | 11.4 %, 2.6 %, 8.8 dB |
+| -30 dB, 3:1, 10 ms attack | +15.6 | -21.2 / -15.0 | 6.2 dB | -0.8 dBTP | 11.2 %, 2.1 %, 8.8 dB |
+| -30 dB, 3:1, 5 ms attack | +15.6 | -21.2 / -15.1 | 6.2 dB | -0.8 dBTP | 9.7 %, 1.5 %, 7.5 dB |
+| -35 dB, 3:1, 10 ms attack | +18.4 | -20.0 / -15.3 | 4.7 dB | -0.8 dBTP | 12.1 %, 2.3 %, 9.3 dB |
+| **-30 dB, 3:1, 5 ms, 10 ms lookahead** | **+16** | **-20.9 / -14.9** | **6.0 dB** | **-0.8 dBTP** | **5.1 %, 0.1 %, 3.7 dB** |
+
+(Release 150 ms, 250 ms at 2:1.)
+
+- **Less boost alone isn't enough:** with awpro-v3's compressor, the
+  limiter does the evening out, and your quiet phrases come out 3 dB
+  quieter than today.
+- **A threshold inside your voice evens it out:** at -30 dB, 3:1, your
+  quiet phrases keep today's level and the loud ones come down 5 dB. At
+  -35 dB it evens out more, but lowers your typical moment by 4 dB instead
+  of 1.5, and needs +18 dB of makeup.
+- **The makeup stays about the same:** your voice is quiet (-29 LUFS raw),
+  so reaching -18 LUFS takes +16 dB, as the loud phrases are first brought
+  down. What the gate lets through between your words comes out as loud as
+  with awpro-v3 (loudest 10 ms: -28 dBFS, against -29), and that is little:
+  99.6 % of that time is digital silence.
+- **Lookahead spares the limiter:** the compressor sees 10 ms ahead, so it
+  is already down when a loud syllable starts. It adds 10 ms of delay
+  (awpro-v4: 41.5 ms in all, awpro-v3: 20 ms), and no measurable CPU.
+- **Your quiet minutes and the busy office:** -19.1 and -18.2 LUFS (4:00–6:00
+  and 42:00–56:00), against -17.7 and -14.0 with awpro-v3.
+
+The final chain on the three stretches:
+
+| stretch | awpro-v3: LUFS, true peak, voice over full scale, spread | awpro-v4 |
+|---|---|---|
+| 4:00–6:00 | -17.9, +6.5 dBTP, 5.4 %, 8.0 dB | -19.3, -1.0 dBTP, 0 %, 5.9 dB |
+| 44:00–47:00 | -13.1, +9.4 dBTP, 28.5 %, 9.5 dB | -17.2, -0.8 dBTP, 0 %, 3.8 dB |
+| 51:00–57:00 | -15.6, +10.9 dBTP, 15.0 %, 10.0 dB | -19.5, -0.9 dBTP, 0 %, 5.7 dB |
+
+**By ear** (blind, awpro-v3 against awpro-v4 at matched loudness, on
+2026-11-27, a quiet moment of yours then the busy office): awpro-v4 is
+"way better".
+
+**Kept, in `chains/awpro-v4.toml`:** -30 dB, 3:1, 5 ms attack, 150 ms
+release, 10 ms lookahead, +16 dB, then the limiter at -1 dBFS. The makeup
+is the volume knob: the right level is for a real call to judge.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
-- **No limiter after +15 dB of makeup gain:** the output clips.
+- **No limiter after +15 dB of makeup gain:** the output clips. Fixed in
+  awpro-v4 (see [volume](#volume-an-even-voice-without-clipping)).
 - **The 9 kHz high shelf does nothing:** the headset sends 16 kHz audio, so
   nothing above 8 kHz exists.
 - **The 90 Hz low shelf works against the 50 Hz high-pass:** it boosts what the

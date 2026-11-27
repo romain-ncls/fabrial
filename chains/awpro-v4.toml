@@ -1,0 +1,66 @@
+# awpro-v3, reviewed stage by stage before adding any (docs/roadmap.md).
+# Work in progress: each change is measured with scripts/stage-report.sh
+# on the same takes (docs/reference-chains.md). So far:
+# - the expander: a gentle gate that keeps the edges of phrases;
+# - the compressor evens out your voice, and a limiter keeps the peaks
+#   under full scale.
+# PipeWire upsamples the headset's 16 kHz to 48 kHz, so this chain runs at
+# 48 kHz too.
+name = "awpro-v4"
+description = "awpro-v3 under review: a gate that keeps the edges of phrases, an even voice without clipping"
+rate = 48000
+
+[[stage]]
+type = "deepfilternet3"
+attenuation-limit = 80
+post-filter-beta = 0.02
+min-processing-threshold = -10
+max-erb-processing-threshold = 30
+max-df-processing-threshold = 20
+
+[[stage]]
+type = "expander"
+# Starts at -45 dB, gently (2:1, as in v3, which may sound smoother than
+# 4:1). It stays open 400 ms after the voice, so the quiet tail of a
+# sentence passes, and sees 10 ms ahead, so it is open when a word starts.
+threshold = -45
+ratio = 2
+attack = 5
+release = 400
+lookahead = 10
+knee = -6
+release-threshold = -80.01
+dry = -80.01 # EasyEffects' "off" for dry still sends -80 dB
+
+[[stage]]
+type = "equalizer"
+bands = [
+  { type = "hi-pass", mode = "rlc-bt", frequency = 50, q = 0.7 },
+  { type = "lo-shelf", mode = "rlc-mt", frequency = 90, gain = 3, q = 0.7 },
+  { type = "bell", mode = "bwc-mt", frequency = 425, gain = -2, q = 1, slope = 2 },
+  { type = "bell", mode = "bwc-bt", frequency = 3500, gain = 3, q = 0.7, slope = 2 },
+  { type = "hi-shelf", mode = "lrx-mt", frequency = 9000, gain = 2, q = 0.7 },
+]
+
+[[stage]]
+type = "compressor"
+# Evens out your voice: from -30 dB, 3:1, loud phrases come down and quiet
+# ones keep their level. Over the 2026-11-17 take, your quiet and loud
+# phrases end up 6 dB apart instead of 11. It sees 10 ms ahead, so it is
+# already down when a loud syllable starts, which leaves little for the
+# limiter. +16 dB brings the voice to about -18.5 LUFS: this is the volume
+# knob.
+threshold = -30
+ratio = 3
+attack = 5
+release = 150
+knee = -6
+makeup = 16
+release-threshold = -40
+lookahead = 10
+
+[[stage]]
+type = "limiter"
+# Catches the peaks the compressor lets through, so nothing passes full
+# scale (v3 went up to +11 dB over it, and the call apps clip that).
+ceiling = -1

@@ -57,7 +57,7 @@ prints the CPU the chain takes, the buffer it adds, and any gaps.
 Apps keep picking the headset. Whenever an app records from the mic fabrial
 reads, fabrial moves it onto its own mic, and puts it back on exit. It
 leaves alone the streams that refuse to move (recorders such as
-`scripts/record-easyeffects.sh`), level meters, and streams on other mics.
+`scripts/record-take.sh`), level meters, and streams on other mics.
 `--no-move` turns this off.
 
 Next to EasyEffects: the apps that WirePlumber already sends to EasyEffects'
@@ -81,20 +81,27 @@ journalctl --user -u fabrial    # the mic it reads, the apps it moves, problems
 ```
 
 As a service, it only logs a line when something goes wrong: gaps, lost
-audio, the mic going silent. To use another chain, override `ExecStart`
-with `systemctl --user edit fabrial`.
+audio, the mic going silent. It runs `awpro-v4`. To go back to `awpro-v3`,
+or use another chain, override `ExecStart` with
+`systemctl --user edit fabrial`.
 
 ## Scripts
 
-- `scripts/record-easyeffects.sh [label]` records the headset's raw mic and
-  EasyEffects' output side by side, until Ctrl+C, into
-  `~/Documents/mic-takes/<date>-<label>/`.
+- `scripts/record-take.sh [label]` records the headset's raw mic and what
+  the call app receives (fabrial's mic, or EasyEffects'), side by side,
+  until Ctrl+C, into `~/Documents/mic-takes/<date>-<label>/`, with the chain
+  in use and the headset's state every 10 s.
 - `scripts/analyze-take.sh <take-dir>` compares the two: levels, clipping,
   loudness, how each input level is treated, what got through between your
   words, and spectrograms.
 - `scripts/compare-render.sh <take-dir> <render-dir>` compares a render with
   what EasyEffects sent for the same stretch, sorted by raw level, with
   spectrograms of the raw input, the render and EasyEffects.
+- `scripts/stage-report.sh <render-dir>` shows what each stage of the chain
+  does, from a render made with `--taps`: how much it changes the level, by
+  raw input level and on your voice, how even your voice comes out, where
+  peaks pass full scale, what's left between your words, what it does to
+  the ends and starts of your phrases, and the loudness after each stage.
 - `scripts/live-check.sh <take-dir> [chain] [from] [seconds]` plays a stretch
   of a take as a fake mic, runs `fabrial run` on it, and compares what the
   "fabrial" mic sent with the offline render. It doesn't touch the real mic,

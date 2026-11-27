@@ -317,6 +317,11 @@ fn stream_props(group: &str) -> PropertiesBox {
     p.insert(*pw::keys::NODE_LINK_GROUP, group);
     // Neither is moved by other tools (EasyEffects moves every stream).
     p.insert("node.dont-move", "true");
+    // Both start at 100 % volume: the chain sets the level. Otherwise
+    // WirePlumber stores any volume set on them and restores it at each
+    // start: something (probably a call app's gain control) once lowered
+    // the virtual mic to 82 %, and every start brought that back.
+    p.insert("state.restore-props", "false");
     p
 }
 

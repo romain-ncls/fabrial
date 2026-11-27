@@ -10,6 +10,10 @@
 //! 3. Gain: the curve at the envelope, with a quadratic knee in the log
 //!    domain around the threshold.
 //! 4. Output: input × gain × makeup × wet, plus input × dry.
+//!
+//! With a lookahead, the audio is delayed and the sidechain is not: the
+//! gain moves that much before the sound it reacts to arrives, so a gate is
+//! already open when a word starts. LSP's sidechain lookahead does the same.
 
 use serde::Deserialize;
 
@@ -46,6 +50,10 @@ pub struct DynamicsParams {
     /// ms: the sidechain's RMS window.
     #[serde(default = "default_reactivity")]
     pub reactivity: f32,
+    /// ms: how far the sidechain sees ahead of the audio. It adds as much
+    /// delay. 0, as in EasyEffects' presets: none.
+    #[serde(default)]
+    pub lookahead: f32,
 }
 
 fn default_knee() -> f32 {
@@ -89,6 +97,9 @@ pub struct Dynamics {
     knee: [f32; 3],
     tilt: [f32; 2],
     floor: f32,
+    // The audio, delayed by the lookahead.
+    delay: Vec<f32>,
+    delay_pos: usize,
     // Output.
     wet: f32,
     dry: f32,
@@ -155,6 +166,8 @@ impl Dynamics {
             floor,
             wet: db_to_gain(p.wet) * db_to_gain(p.makeup),
             dry: p.dry.map_or(0., db_to_gain),
+            delay: vec![0.; (p.lookahead.max(0.) * 0.001 * fs).round() as usize],
+            delay_pos: 0,
         }
     }
 
@@ -221,7 +234,73 @@ impl Stage for Dynamics {
             };
             self.env += tau * d;
             let g = self.gain(self.env);
-            *x = *x * g * self.wet + *x * self.dry;
+            let a = if self.delay.is_empty() {
+                *x
+            } else {
+                let a = std::mem::replace(&mut self.delay[self.delay_pos], *x);
+                self.delay_pos = (self.delay_pos + 1) % self.delay.len();
+                a
+            };
+            *x = a * g * self.wet + a * self.dry;
         }
+    }
+
+    fn latency(&self) -> usize {
+        self.delay.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(toml: &str) -> DynamicsParams {
+        toml::from_str(toml).unwrap()
+    }
+
+    #[test]
+    fn lookahead_delays_the_audio() {
+        let p =
+            params("threshold = 0\nratio = 4\nattack = 5\nrelease = 50\nmakeup = 6\nlookahead = 1");
+        let mut c = Dynamics::compressor(&p, 48_000);
+        assert_eq!(c.latency(), 48);
+        let x: Vec<f32> = (0..1000).map(|i| 0.1 * (i as f32 * 0.05).sin()).collect();
+        let mut y = x.clone();
+        c.process(&mut y);
+        let g = db_to_gain(6.);
+        assert!(y[..48].iter().all(|&s| s == 0.));
+        for i in 0..x.len() - 48 {
+            assert!((y[i + 48] - x[i] * g).abs() < 1e-6, "sample {i}");
+        }
+    }
+
+    /// After silence, a tone well above the threshold: without lookahead
+    /// the expander is still closed when it starts; with it, it is open.
+    #[test]
+    fn lookahead_opens_the_gate_before_the_sound() {
+        let tone = |i: usize| {
+            if i < 4800 {
+                0.
+            } else {
+                0.1 * (i as f32 * 0.2).sin()
+            }
+        };
+        let x: Vec<f32> = (0..9600).map(tone).collect();
+        let first_ms = |lookahead: f32| {
+            let p = params(&format!(
+                "threshold = -45\nratio = 4\nattack = 5\nrelease = 400\nlookahead = {lookahead}"
+            ));
+            let mut e = Dynamics::expander(&p, 48_000);
+            let mut y = x.clone();
+            e.process(&mut y);
+            let d = e.latency();
+            // Output over input energy in the tone's first ms.
+            let (o, i): (f32, f32) = (4800..4848)
+                .map(|k| (y[k + d].powi(2), x[k].powi(2)))
+                .fold((0., 0.), |a, b| (a.0 + b.0, a.1 + b.1));
+            10. * (o / i).log10()
+        };
+        assert!(first_ms(0.) < -6., "without: {}", first_ms(0.));
+        assert!(first_ms(10.) > -1., "with: {}", first_ms(10.));
     }
 }
