@@ -4,6 +4,8 @@
 # - by raw input level: how much each stage changes the level;
 # - on your voice: how much that change varies (a fixed gain doesn't vary,
 #   a compressor at work does), and how often peaks pass full scale;
+# - how even your voice is: its level in quiet and loud moments (400 ms
+#   blocks where you talk), after each stage;
 # - the ends and starts of your phrases (around a pause of 0.5 s or more):
 #   how much each stage lowers them, since a gate that cuts the quiet last
 #   word of a sentence is the worst thing it can do;
@@ -76,6 +78,17 @@ END {
   for (c = 1; c <= N; c++) { k = nv[c]; delete A; for (i = 1; i <= k; i++) A[i] = V[c, i]
     printf "%-20s %+8.1f %+8.1f %+8.1f %16.1f %%\n", name[c+1], q(A, k, 0.5), q(A, k, 0.1), q(A, k, 0.9), 100*over[c]/v }
   printf "\n(median, p10, p90: how much the stage changes your voice\x27s level. When\n p10 and p90 are close, the stage acts as a fixed volume change.)\n\n"
+  # Blocks of 400 ms where you talk at least half the time: the level of
+  # each, quiet ones against loud ones. Unlike the loudness range (LRA),
+  # nearby voices between your words do not count.
+  for (i = 1; i <= t; i++) { k = int((i-1)/40); bv[k] += vo[i]; for (c = 0; c <= N; c++) BE[c, k] += 10^(L[c, i]/10) }
+  for (k in bv) if (bv[k] >= 20) blk[++nbk] = k
+  printf "How even your voice is (%d blocks of 400 ms where you talk at least half the time):\n\n", nbk
+  printf "%-20s %10s %10s %10s %10s\n", "", "quiet p10", "middle", "loud p90", "spread"
+  if (nbk) for (c = 0; c <= N; c++) { delete A; for (j = 1; j <= nbk; j++) A[j] = 10*log(BE[c, blk[j]]/40)/log(10)
+    lo = q(A, nbk, 0.1); hi = q(A, nbk, 0.9)
+    printf "%-20s %10.1f %10.1f %10.1f %10.1f\n", name[c+1], lo, q(A, nbk, 0.5), hi, hi - lo }
+  printf "\n(your voice\x27s level, dBFS, in its quiet, middle and loud moments. A\n compressor that evens it out narrows the spread.)\n\n"
   printf "After each stage, over the whole stretch:\n\n%-20s %10s %12s %16s\n", "", "LUFS", "true peak", "digital silence"
   for (c = 0; c <= N; c++) printf "%-20s %10s %12s %14.1f %%\n", name[c+1], I[c], TP[c], 100*sil[c]/t
   # Windows at least 1 s (100 windows) from any window of your voice.
