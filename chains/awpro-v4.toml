@@ -1,11 +1,13 @@
 # awpro-v3, reviewed stage by stage before adding any (docs/roadmap.md).
 # Work in progress: each change is measured with scripts/stage-report.sh
 # on the same takes (docs/reference-chains.md). So far:
-# - the expander: a gentle gate that keeps the edges of phrases.
+# - the expander: a gentle gate that keeps the edges of phrases;
+# - the compressor evens out your voice, and a limiter keeps the peaks
+#   under full scale.
 # PipeWire upsamples the headset's 16 kHz to 48 kHz, so this chain runs at
 # 48 kHz too.
 name = "awpro-v4"
-description = "awpro-v3 under review: a gate that keeps the edges of phrases (so far)"
+description = "awpro-v3 under review: a gate that keeps the edges of phrases, an even voice without clipping"
 rate = 48000
 
 [[stage]]
@@ -42,11 +44,23 @@ bands = [
 
 [[stage]]
 type = "compressor"
-threshold = -20
-ratio = 4
+# Evens out your voice: from -30 dB, 3:1, loud phrases come down and quiet
+# ones keep their level. Over the 2026-11-17 take, your quiet and loud
+# phrases end up 6 dB apart instead of 11. It sees 10 ms ahead, so it is
+# already down when a loud syllable starts, which leaves little for the
+# limiter. +16 dB brings the voice to about -18.5 LUFS: this is the volume
+# knob.
+threshold = -30
+ratio = 3
 attack = 5
-release = 75
+release = 150
 knee = -6
-makeup = 15
+makeup = 16
 release-threshold = -40
-dry = -80.01
+lookahead = 10
+
+[[stage]]
+type = "limiter"
+# Catches the peaks the compressor lets through, so nothing passes full
+# scale (v3 went up to +11 dB over it, and the call apps clip that).
+ceiling = -1

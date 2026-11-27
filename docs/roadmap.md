@@ -77,7 +77,9 @@
   [planned fixes](reference-chains.md) come after, where they still make
   sense.
   The reviewed chain grows in `chains/awpro-v4.toml`: so far, a gentle
-  gate that keeps the edges of phrases.
+  gate that keeps the edges of phrases, and a compressor and limiter that
+  even out the voice without clipping. Next: DeepFilterNet's attenuation
+  limit (it cuts the fading ends of phrases), then the EQ.
 - **Recorder built in:**
   - the raw mic and every stage's output, sample-aligned, in one file
   - a rolling buffer of the last few minutes, with a shortcut to save it

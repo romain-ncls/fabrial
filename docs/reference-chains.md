@@ -220,9 +220,68 @@ couldn't be judged: the voice already cuts in the raw mic there (see
 awpro-v3 and catches about as much, cuts neither ends nor starts, and adds
 10 ms of delay. D's extra catch wasn't audible.
 
+#### Volume: an even voice, without clipping
+
+awpro-v3's compressor starts at -20 dB, above most of your voice, so it
+acts as a fixed +15 dB, and nothing stops the peaks (see above). The goal:
+your quiet phrases as loud as today, your loud ones brought down, nothing
+over full scale.
+
+**How it was tried:** DeepFilterNet, the gate and the EQ of awpro-v4 ran
+once over the whole take (57 minutes, 88 s of your voice). Each compressor
+then ran on that, followed by a limiter at -1 dBFS, with the makeup that
+brings the voice to about -18 LUFS. The "spread" is how far apart your
+quiet and loud moments are: the level of the 400 ms blocks where you talk,
+loud (p90) minus quiet (p10), from `stage-report.sh`'s "How even your voice
+is". Raw, it is 12.1 dB. The loudness range (LRA) isn't used: it counts
+the nearby voices too, so where you talk little, it measures the office.
+
+| compressor | makeup | quiet / loud phrases (dBFS) | spread | true peak | limiter: voice lowered > 1 dB, > 3 dB, at most |
+|---|---|---|---|---|---|
+| awpro-v3: -20 dB, 4:1, no limiter | +15 | -21.4 / -10.1 | 11.3 dB | +10.9 dBTP | |
+| awpro-v3's, less makeup | +12.2 | -24.2 / -14.7 | 9.4 dB | -0.8 dBTP | 12.1 %, 3.5 %, 8.0 dB |
+| -30 dB, 2:1, 10 ms attack | +14.9 | -21.9 / -15.0 | 7.0 dB | -0.8 dBTP | 11.4 %, 2.6 %, 8.8 dB |
+| -30 dB, 3:1, 10 ms attack | +15.6 | -21.2 / -15.0 | 6.2 dB | -0.8 dBTP | 11.2 %, 2.1 %, 8.8 dB |
+| -30 dB, 3:1, 5 ms attack | +15.6 | -21.2 / -15.1 | 6.2 dB | -0.8 dBTP | 9.7 %, 1.5 %, 7.5 dB |
+| -35 dB, 3:1, 10 ms attack | +18.4 | -20.0 / -15.3 | 4.7 dB | -0.8 dBTP | 12.1 %, 2.3 %, 9.3 dB |
+| **-30 dB, 3:1, 5 ms, 10 ms lookahead** | **+16** | **-20.9 / -14.9** | **6.0 dB** | **-0.8 dBTP** | **5.1 %, 0.1 %, 3.7 dB** |
+
+(Release 150 ms, 250 ms at 2:1.)
+
+- **Less boost alone isn't enough:** with awpro-v3's compressor, the
+  limiter does the evening out, and your quiet phrases come out 3 dB
+  quieter than today.
+- **A threshold inside your voice evens it out:** at -30 dB, 3:1, your
+  quiet phrases keep today's level and the loud ones come down 5 dB. At
+  -35 dB it evens out more, but lowers your typical moment by 4 dB instead
+  of 1.5, and needs +18 dB of makeup.
+- **The makeup stays about the same:** your voice is quiet (-29 LUFS raw),
+  so reaching -18 LUFS takes +16 dB, as the loud phrases are first brought
+  down. What the gate lets through between your words comes out as loud as
+  with awpro-v3 (loudest 10 ms: -28 dBFS, against -29), and that is little:
+  99.6 % of that time is digital silence.
+- **Lookahead spares the limiter:** the compressor sees 10 ms ahead, so it
+  is already down when a loud syllable starts. It adds 10 ms of delay
+  (awpro-v4: 41.5 ms in all, awpro-v3: 20 ms), and no measurable CPU.
+- **Your quiet minutes and the busy office:** -19.1 and -18.2 LUFS (4:00–6:00
+  and 42:00–56:00), against -17.7 and -14.0 with awpro-v3.
+
+The final chain on the three stretches:
+
+| stretch | awpro-v3: LUFS, true peak, voice over full scale, spread | awpro-v4 |
+|---|---|---|
+| 4:00–6:00 | -17.9, +6.5 dBTP, 5.4 %, 8.0 dB | -19.3, -1.0 dBTP, 0 %, 5.9 dB |
+| 44:00–47:00 | -13.1, +9.4 dBTP, 28.5 %, 9.5 dB | -17.2, -0.8 dBTP, 0 %, 3.8 dB |
+| 51:00–57:00 | -15.6, +10.9 dBTP, 15.0 %, 10.0 dB | -19.5, -0.9 dBTP, 0 %, 5.7 dB |
+
+**Kept, in `chains/awpro-v4.toml`:** -30 dB, 3:1, 5 ms attack, 150 ms
+release, 10 ms lookahead, +16 dB, then the limiter at -1 dBFS. The makeup
+is the volume knob: the right level is for a real call to judge.
+
 Known problems (from the [first take](takes/2026-11-17-meeting.md)):
 
-- **No limiter after +15 dB of makeup gain:** the output clips.
+- **No limiter after +15 dB of makeup gain:** the output clips. Fixed in
+  awpro-v4 (see [volume](#volume-an-even-voice-without-clipping)).
 - **The 9 kHz high shelf does nothing:** the headset sends 16 kHz audio, so
   nothing above 8 kHz exists.
 - **The 90 Hz low shelf works against the 50 Hz high-pass:** it boosts what the
