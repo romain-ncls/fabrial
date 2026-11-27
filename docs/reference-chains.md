@@ -274,6 +274,10 @@ The final chain on the three stretches:
 | 44:00–47:00 | -13.1, +9.4 dBTP, 28.5 %, 9.5 dB | -17.2, -0.8 dBTP, 0 %, 3.8 dB |
 | 51:00–57:00 | -15.6, +10.9 dBTP, 15.0 %, 10.0 dB | -19.5, -0.9 dBTP, 0 %, 5.7 dB |
 
+**By ear** (blind, awpro-v3 against awpro-v4 at matched loudness, on
+2026-11-27, a quiet moment of yours then the busy office): awpro-v4 is
+"way better".
+
 **Kept, in `chains/awpro-v4.toml`:** -30 dB, 3:1, 5 ms attack, 150 ms
 release, 10 ms lookahead, +16 dB, then the limiter at -1 dBFS. The makeup
 is the volume knob: the right level is for a real call to judge.

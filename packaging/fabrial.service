@@ -8,7 +8,7 @@ After=pipewire.service wireplumber.service
 BindsTo=pipewire.service
 
 [Service]
-ExecStart=/usr/bin/fabrial run --chain /usr/share/fabrial/chains/awpro-v3.toml --stats 0
+ExecStart=/usr/bin/fabrial run --chain /usr/share/fabrial/chains/awpro-v4.toml --stats 0
 Restart=on-failure
 RestartSec=2
 

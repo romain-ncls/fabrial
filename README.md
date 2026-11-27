@@ -81,8 +81,9 @@ journalctl --user -u fabrial    # the mic it reads, the apps it moves, problems
 ```
 
 As a service, it only logs a line when something goes wrong: gaps, lost
-audio, the mic going silent. To use another chain, override `ExecStart`
-with `systemctl --user edit fabrial`.
+audio, the mic going silent. It runs `awpro-v4`. To go back to `awpro-v3`,
+or use another chain, override `ExecStart` with
+`systemctl --user edit fabrial`.
 
 ## Scripts
 
